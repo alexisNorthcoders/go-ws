@@ -1,6 +1,6 @@
 # Snake Game WebSocket Server
 
-This is a WebSocket server written in Go that facilitates real-time communication between players in a multiplayer Snake game.
+This is a WebSocket server written in Go that facilitates real-time communication between players in a multiplayer Snake game (https://github.com/alexisNorthcoders/p5_snake_game).
 
 ## Features
 - Handles WebSocket connections using Gorilla WebSocket.
