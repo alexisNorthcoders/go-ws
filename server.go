@@ -29,6 +29,7 @@ type Message struct {
 	Key    string  `json:"key,omitempty"`
 	ID     string  `json:"id,omitempty"`
 	Config *Config `json:"config,omitempty"`
+	Food   [][]int `json:"food,omitempty"`
 }
 
 // Map to store connected clients
@@ -91,15 +92,29 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 		log.Println("Client requested game config")
 		sendConfig(conn)
 
+	case "spawnFood":
+		coords := GenerateFoodCoordinates(1)
+		log.Printf("Spawning food at: %v", coords)
+
+		foodMessage := Message{
+			Event: "spawnFood",
+			Food:  coords,
+		}
+
+		broadcast(foodMessage)
+
 	default:
 		log.Println("Unknown event received:", message.Event)
 	}
 }
 
 func sendConfig(conn *websocket.Conn) {
+	coords := GenerateFoodCoordinates(5)
+
 	configMessage := Message{
 		Event:  "config",
 		Config: &GameConfig,
+		Food:   coords,
 	}
 	msgBytes, err := json.Marshal(configMessage)
 	if err != nil {

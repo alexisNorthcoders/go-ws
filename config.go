@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 )
 
@@ -28,6 +29,16 @@ func LoadConfig(filename string) {
 		log.Println("Error parsing config file:", err)
 		GameConfig = Config{FoodStorage: 50, Side: 800, Fps: 10}
 	}
+}
+
+func GenerateFoodCoordinates(foodCount int) [][]int {
+	coordinates := make([][]int, foodCount)
+
+	for i := range foodCount {
+		coordinates[i] = []int{rand.Intn(20), rand.Intn(20)}
+	}
+
+	return coordinates
 }
 
 func init() {

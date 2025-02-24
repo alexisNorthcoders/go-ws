@@ -1,5 +1,5 @@
 {
     "side": 800,
-    "foodStorage": 100,
-    "fps": 20
+    "foodStorage": 10,
+    "fps": 10
   }
