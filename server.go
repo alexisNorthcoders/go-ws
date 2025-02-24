@@ -24,10 +24,11 @@ type Player struct {
 
 // Message structure
 type Message struct {
-	Event  string `json:"event"`
-	Player Player `json:"player,omitempty"`
-	Key    string `json:"key,omitempty"`
-	ID     string `json:"id,omitempty"`
+	Event  string  `json:"event"`
+	Player Player  `json:"player,omitempty"`
+	Key    string  `json:"key,omitempty"`
+	ID     string  `json:"id,omitempty"`
+	Config *Config `json:"config,omitempty"`
 }
 
 // Map to store connected clients
@@ -86,8 +87,32 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 		log.Printf("Player disconnected: %s", message.ID)
 		broadcast(message)
 
+	case "getConfig":
+		log.Println("Client requested game config")
+		sendConfig(conn)
+
 	default:
 		log.Println("Unknown event received:", message.Event)
+	}
+}
+
+func sendConfig(conn *websocket.Conn) {
+	configMessage := Message{
+		Event:  "config",
+		Config: &GameConfig,
+	}
+	msgBytes, err := json.Marshal(configMessage)
+	if err != nil {
+		log.Println("Error encoding config message:", err)
+		return
+	}
+	err = conn.WriteMessage(websocket.TextMessage, msgBytes)
+	if err != nil {
+		log.Println("Error sending config to client:", err)
+		conn.Close()
+		clientsMutex.Lock()
+		delete(clients, conn)
+		clientsMutex.Unlock()
 	}
 }
 
