@@ -34,7 +34,9 @@ type Message struct {
 
 // Map to store connected clients
 var clients = make(map[*websocket.Conn]bool)
+var waitingRoom = make(map[string]Player)
 var clientsMutex sync.Mutex
+var waitingRoomMutex sync.Mutex
 
 func handleConnections(w http.ResponseWriter, r *http.Request) {
 	// Upgrade HTTP request to WebSocket
@@ -78,7 +80,16 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 	switch message.Event {
 	case "newPlayer":
 		log.Printf("New player joined: %s", message.Player.Name)
-		broadcast(message)
+		addToWaitingRoom(message.Player)
+	case "waitingRoomStatus":
+		log.Println("Sending waiting room status")
+		broadcastWaitingRoomStatus()
+
+	case "startGame":
+		if len(waitingRoom) > 0 {
+			log.Println("Starting game...")
+			startGame()
+		}
 
 	case "playerMovement":
 		log.Printf("Player moved: %s, Key: %s", message.Player.Name, message.Key)
@@ -86,6 +97,8 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 
 	case "playerDisconnected":
 		log.Printf("Player disconnected: %s", message.ID)
+		removeFromWaitingRoom(message.ID)
+		broadcastWaitingRoomStatus()
 		broadcast(message)
 
 	case "getConfig":
@@ -108,8 +121,73 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 	}
 }
 
+// Add player to the waiting room
+func addToWaitingRoom(player Player) {
+	waitingRoomMutex.Lock()
+	waitingRoom[player.Name] = player
+	waitingRoomMutex.Unlock()
+}
+
+// Remove player from the waiting room
+func removeFromWaitingRoom(playerID string) {
+	waitingRoomMutex.Lock()
+	delete(waitingRoom, playerID)
+	waitingRoomMutex.Unlock()
+}
+
+// Broadcast the current waiting room status
+func broadcastWaitingRoomStatus() {
+	waitingRoomMutex.Lock()
+	players := make([]Player, 0, len(waitingRoom))
+	for _, player := range waitingRoom {
+		players = append(players, player)
+	}
+	waitingRoomMutex.Unlock()
+
+	// Assign players to JSON and include in the message
+	messageBytes, err := json.Marshal(struct {
+		Event   string   `json:"event"`
+		Players []Player `json:"players"`
+	}{
+		Event:   "waitingRoomStatus",
+		Players: players,
+	})
+	if err != nil {
+		log.Println("Error encoding waiting room status:", err)
+		return
+	}
+
+	// Broadcast the updated waiting room status
+	clientsMutex.Lock()
+	defer clientsMutex.Unlock()
+
+	for conn := range clients {
+		err := conn.WriteMessage(websocket.TextMessage, messageBytes)
+		if err != nil {
+			log.Println("Error sending waiting room status to client:", err)
+			conn.Close()
+			delete(clients, conn)
+		}
+	}
+}
+
+// Start the game when all players are ready
+func startGame() {
+
+	message := Message{
+		Event: "startGame",
+	}
+
+	broadcast(message)
+
+	// Clear the waiting room since the game has started
+	waitingRoomMutex.Lock()
+	waitingRoom = make(map[string]Player)
+	waitingRoomMutex.Unlock()
+}
+
 func sendConfig(conn *websocket.Conn) {
-	coords := GenerateFoodCoordinates(5)
+	coords := GenerateFoodCoordinates(GameConfig.FoodStorage)
 
 	configMessage := Message{
 		Event:  "config",
@@ -157,13 +235,6 @@ func handleDisconnection(conn *websocket.Conn) {
 	clientsMutex.Lock()
 	delete(clients, conn)
 	clientsMutex.Unlock()
-
-	// Notify others that a player has disconnected
-	message := Message{
-		Event: "playerDisconnected",
-		ID:    "some-unique-id", // You need to track player IDs properly
-	}
-	broadcast(message)
 }
 
 func main() {
