@@ -78,6 +78,8 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 	}
 
 	switch message.Event {
+	case "ping":
+		conn.WriteMessage(websocket.TextMessage, []byte(`{"event":"pong"}`))
 	case "newPlayer":
 		log.Printf("New player joined: %s", message.Player.Name)
 		addToWaitingRoom(message.Player)
