@@ -3,8 +3,10 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"math/rand"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -35,6 +37,9 @@ type Message struct {
 // Map to store connected clients
 var clients = make(map[*websocket.Conn]bool)
 var waitingRoom = make(map[string]Player)
+var hasGameStarted bool
+var directions = []string{"UP", "DOWN", "RIGHT", "LEFT"}
+var rng = rand.New(rand.NewSource(time.Now().UnixNano()))
 var clientsMutex sync.Mutex
 var waitingRoomMutex sync.Mutex
 
@@ -81,6 +86,7 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 	case "ping":
 		conn.WriteMessage(websocket.TextMessage, []byte(`{"event":"pong"}`))
 	case "newPlayer":
+		hasGameStarted = false
 		log.Printf("New player joined: %s", message.Player.Name)
 		addToWaitingRoom(message.Player)
 	case "waitingRoomStatus":
@@ -105,6 +111,7 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 
 	case "getConfig":
 		log.Println("Client requested game config")
+		serverSnake()
 		sendConfig(conn)
 
 	case "spawnFood":
@@ -120,6 +127,44 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 
 	default:
 		log.Println("Unknown event received:", message.Event)
+	}
+}
+
+func serverSnake() {
+
+	serverPlayer := Player{
+		Name: "Server",
+		ID:   "1",
+	}
+	addToWaitingRoom(serverPlayer)
+}
+
+func moveSnake(direction string) {
+	movement := Message{
+		Event: "playerMovement",
+		Player: Player{
+			Name: "Server",
+			ID:   "1",
+		},
+		Key: direction,
+	}
+	broadcast(movement)
+}
+
+func startGameLoop() {
+	ticker := time.NewTicker(1 * time.Second) // Run every second
+	defer ticker.Stop()
+
+	for range ticker.C {
+		if !hasGameStarted {
+			return // Exit loop if game stops
+		}
+
+		// Pick a random direction
+		randomDirection := directions[rng.Intn(len(directions))]
+
+		// Call moveSnake with the random direction
+		moveSnake(randomDirection)
 	}
 }
 
@@ -176,11 +221,15 @@ func broadcastWaitingRoomStatus() {
 // Start the game when all players are ready
 func startGame() {
 
+	hasGameStarted = true
+
 	message := Message{
 		Event: "startGame",
 	}
 
 	broadcast(message)
+
+	go startGameLoop()
 
 	// Clear the waiting room since the game has started
 	waitingRoomMutex.Lock()
@@ -242,7 +291,7 @@ func handleDisconnection(conn *websocket.Conn) {
 func main() {
 	http.HandleFunc("/ws", handleConnections)
 
-	port := "4001"
+	port := "4002"
 	log.Println("WebSocket server started on port", port)
 	err := http.ListenAndServe(":"+port, nil)
 	if err != nil {
