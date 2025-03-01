@@ -20,8 +20,15 @@ var upgrader = websocket.Upgrader{
 
 // Player structure
 type Player struct {
-	Name string `json:"name"`
-	ID   string `json:"id"`
+	Name  string `json:"name"`
+	ID    string `json:"id"`
+	Snake Snake  `json:"snake,omitempty"`
+}
+
+// Snake structure
+type Snake struct {
+	X int `json:"x"`
+	Y int `json:"y"`
 }
 
 // Message structure
@@ -100,7 +107,7 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 		}
 
 	case "playerMovement":
-		log.Printf("Player moved: %s, Key: %s", message.Player.Name, message.Key)
+		log.Printf("Player moved: %s, Id: %s, Key: %s", message.Player.Name, message.Player.ID, message.Key)
 		broadcast(message)
 
 	case "playerDisconnected":
@@ -134,7 +141,7 @@ func serverSnake() {
 
 	serverPlayer := Player{
 		Name: "Server",
-		ID:   "1",
+		ID:   "Server",
 	}
 	addToWaitingRoom(serverPlayer)
 }
@@ -144,7 +151,7 @@ func moveSnake(direction string) {
 		Event: "playerMovement",
 		Player: Player{
 			Name: "Server",
-			ID:   "1",
+			ID:   "Server",
 		},
 		Key: direction,
 	}
@@ -152,18 +159,14 @@ func moveSnake(direction string) {
 }
 
 func startGameLoop() {
-	ticker := time.NewTicker(1 * time.Second) // Run every second
+	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
 	for range ticker.C {
 		if !hasGameStarted {
-			return // Exit loop if game stops
+			return
 		}
-
-		// Pick a random direction
 		randomDirection := directions[rng.Intn(len(directions))]
-
-		// Call moveSnake with the random direction
 		moveSnake(randomDirection)
 	}
 }
