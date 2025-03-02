@@ -57,6 +57,12 @@ var rng = rand.New(rand.NewSource(time.Now().UnixNano()))
 var clientsMutex sync.Mutex
 var waitingRoomMutex sync.Mutex
 
+// position vars
+var startingPositions = []struct{ x, y int }{
+	{5, 5}, {15, 5}, {15, 5}, {15, 15},
+}
+var nextPositionIndex = 0
+
 func handleConnections(w http.ResponseWriter, r *http.Request) {
 	// Upgrade HTTP request to WebSocket
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -150,6 +156,7 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 }
 
 func serverSnake() {
+
 	serverColours := Colours{
 		Body: "yellow",
 		Head: "White",
@@ -191,8 +198,20 @@ func startGameLoop() {
 // Add player to the waiting room
 func addToWaitingRoom(player Player) {
 	waitingRoomMutex.Lock()
+	defer waitingRoomMutex.Unlock()
+
+	// Assign a starting position
+	if nextPositionIndex < len(startingPositions) {
+		player.Snake.X = startingPositions[nextPositionIndex].x
+		player.Snake.Y = startingPositions[nextPositionIndex].y
+		nextPositionIndex++
+	} else {
+		// Handle case where there are more players than predefined positions
+		player.Snake.X = 0 // Default position if needed
+		player.Snake.Y = 0
+	}
+
 	waitingRoom[player.ID] = player
-	waitingRoomMutex.Unlock()
 }
 
 // Remove player from the waiting room
@@ -240,7 +259,7 @@ func broadcastWaitingRoomStatus() {
 
 // Start the game when all players are ready
 func startGame() {
-
+	nextPositionIndex = 0
 	hasGameStarted = true
 
 	message := Message{
