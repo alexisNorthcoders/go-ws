@@ -2,9 +2,12 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -121,15 +124,20 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 		serverSnake()
 		sendConfig(conn)
 
-	case "spawnFood":
-		coords := GenerateFoodCoordinates(1)
-		log.Printf("Spawning food at: %v", coords)
+	case "foodEaten":
+		log.Printf("Food Eaten id: %s", message.ID)
+		id, err := strconv.Atoi(message.ID)
+		if err != nil {
+			fmt.Println("Invalid ID:", err)
+			return
+		}
+		coords := [][]int{{rand.Intn(20), rand.Intn(20), id}}
+		log.Printf("Updating food id: %s at: %v", message.ID, coords)
 
 		foodMessage := Message{
-			Event: "spawnFood",
+			Event: "updateFood",
 			Food:  coords,
 		}
-
 		broadcast(foodMessage)
 
 	default:
@@ -284,7 +292,6 @@ func broadcast(message Message) {
 	}
 }
 
-// Handle client disconnection
 func handleDisconnection(conn *websocket.Conn) {
 	clientsMutex.Lock()
 	delete(clients, conn)
@@ -292,9 +299,14 @@ func handleDisconnection(conn *websocket.Conn) {
 }
 
 func main() {
+	port := "4002"
+
+	if os.Getenv("BUILD_MODE") == "true" {
+		port = "4001"
+	}
+
 	http.HandleFunc("/ws", handleConnections)
 
-	port := "4002"
 	log.Println("WebSocket server started on port", port)
 	err := http.ListenAndServe(":"+port, nil)
 	if err != nil {

@@ -35,7 +35,7 @@ func GenerateFoodCoordinates(foodCount int) [][]int {
 	coordinates := make([][]int, foodCount)
 
 	for i := range foodCount {
-		coordinates[i] = []int{rand.Intn(20), rand.Intn(20)}
+		coordinates[i] = []int{rand.Intn(20), rand.Intn(20), i}
 	}
 
 	return coordinates

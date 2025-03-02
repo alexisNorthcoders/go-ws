@@ -77,3 +77,9 @@ Broadcasted when a player disconnects.
 
 ## Handling Disconnections
 When a player disconnects, the server removes the client from the active list and notifies other players.
+
+## Build commands
+
+- `go build -o go-server`
+- `sudo mv go-server /usr/local/bin`
+- `sudo systemctl restart go-server`
