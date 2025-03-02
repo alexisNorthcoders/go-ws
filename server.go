@@ -21,20 +21,24 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-// Player structure
-type Player struct {
-	Name  string `json:"name"`
-	ID    string `json:"id"`
-	Snake Snake  `json:"snake,omitempty"`
+type Colours struct {
+	Body string `json:"body"`
+	Head string `json:"head"`
+	Eyes string `json:"eyes"`
 }
 
-// Snake structure
+type Player struct {
+	Name    string  `json:"name"`
+	ID      string  `json:"id"`
+	Snake   Snake   `json:"snake,omitempty"`
+	Colours Colours `json:"colours,omitempty"`
+}
+
 type Snake struct {
 	X int `json:"x"`
 	Y int `json:"y"`
 }
 
-// Message structure
 type Message struct {
 	Event  string  `json:"event"`
 	Player Player  `json:"player,omitempty"`
@@ -146,10 +150,15 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 }
 
 func serverSnake() {
-
+	serverColours := Colours{
+		Body: "yellow",
+		Head: "White",
+		Eyes: "green",
+	}
 	serverPlayer := Player{
-		Name: "Server",
-		ID:   "Server",
+		Name:    "Server",
+		ID:      "Server",
+		Colours: serverColours,
 	}
 	addToWaitingRoom(serverPlayer)
 }
@@ -182,7 +191,7 @@ func startGameLoop() {
 // Add player to the waiting room
 func addToWaitingRoom(player Player) {
 	waitingRoomMutex.Lock()
-	waitingRoom[player.Name] = player
+	waitingRoom[player.ID] = player
 	waitingRoomMutex.Unlock()
 }
 
