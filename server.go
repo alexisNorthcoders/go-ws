@@ -326,6 +326,25 @@ func handleDisconnection(conn *websocket.Conn) {
 	clientsMutex.Unlock()
 }
 
+func webhookHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		return
+	}
+
+	secret := os.Getenv("WEBHOOK_SECRET")
+	if secret != "" && r.Header.Get("X-Gitlab-Token") != secret {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	log.Println("Webhook received. Triggering InitContentful()")
+	InitContentful()
+
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintln(w, "Webhook received and InitContentful triggered")
+}
+
 func main() {
 	port := "4002"
 
@@ -336,6 +355,7 @@ func main() {
 	InitContentful()
 
 	http.HandleFunc("/ws", handleConnections)
+	http.HandleFunc("/webhook", webhookHandler)
 
 	log.Println("WebSocket server started on port", port)
 	err := http.ListenAndServe(":"+port, nil)

@@ -37,6 +37,8 @@ var GameConfigJSON Config
 
 func InitContentful() {
 
+	log.Println("InitContentful() called")
+
 	err := godotenv.Load()
 	if err != nil {
 		log.Println("Warning: No .env file found, using system environment variables")
@@ -128,15 +130,4 @@ func LoadConfig() {
 		Fps:         contentfulConfig.FPS,
 	}
 	fmt.Printf("Loaded Contentful Config: %+v\n", GameConfigJSON)
-}
-
-func PrintContentfulConfig() {
-	configs, err := FetchGameConfig()
-	if err != nil {
-		log.Println("Failed to fetch ContentfulConfig:", err)
-		return
-	}
-
-	jsonData, _ := json.MarshalIndent(configs, "", "  ")
-	fmt.Println(string(jsonData))
 }
