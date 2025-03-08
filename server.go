@@ -277,11 +277,11 @@ func startGame() {
 }
 
 func sendConfig(conn *websocket.Conn) {
-	coords := GenerateFoodCoordinates(GameConfig.FoodStorage)
+	coords := GenerateFoodCoordinates(GameConfigJSON.FoodStorage)
 
 	configMessage := Message{
 		Event:  "config",
-		Config: &GameConfig,
+		Config: &GameConfigJSON,
 		Food:   coords,
 	}
 	msgBytes, err := json.Marshal(configMessage)
@@ -332,6 +332,8 @@ func main() {
 	if os.Getenv("BUILD_MODE") == "true" {
 		port = "4001"
 	}
+
+	InitContentful()
 
 	http.HandleFunc("/ws", handleConnections)
 

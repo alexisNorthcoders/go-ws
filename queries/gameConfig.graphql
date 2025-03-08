@@ -1,0 +1,11 @@
+{
+  gameConfigCollection {
+    items {
+      entryTitle
+      canvasSize
+      fps
+      scaleFactor
+      foodNumber
+    }
+  }
+}

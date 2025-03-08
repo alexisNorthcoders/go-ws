@@ -2,6 +2,7 @@
 
 trap 'kill $(jobs -p)' EXIT
 
+
 while true; do
     inotifywait -e modify -r ./*.go
 
