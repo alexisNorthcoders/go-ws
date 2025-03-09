@@ -83,3 +83,6 @@ When a player disconnects, the server removes the client from the active list an
 - `go build -o go-server`
 - `sudo mv go-server /usr/local/bin`
 - `sudo systemctl restart go-server`
+
+## Service file path
+- `/etc/systemd/system/go-server.service`

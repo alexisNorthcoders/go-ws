@@ -12,11 +12,35 @@ import (
 )
 
 type GameConfig struct {
-	EntryTitle  string `json:"entryTitle"`
-	CanvasSize  int    `json:"canvasSize"`
-	FPS         int    `json:"fps"`
-	ScaleFactor int    `json:"scaleFactor"`
-	FoodNumber  int    `json:"foodNumber"`
+	EntryTitle       string           `json:"entryTitle"`
+	CanvasSize       int              `json:"canvasSize"`
+	FPS              int              `json:"fps"`
+	ScaleFactor      int              `json:"scaleFactor"`
+	FoodNumber       int              `json:"foodNumber"`
+	WaitingRoom      WaitingRoom      `json:"waitingRoom"`
+	SnakesCollection SnakesCollection `json:"snakesCollection"`
+}
+
+type WaitingRoom struct {
+	WaitingMessage   string        `json:"waitingMessage"`
+	BackgroundColour ColourDetails `json:"backgroundColour"`
+}
+
+type SnakesCollection struct {
+	Items []ContentfulSnake `json:"items"`
+}
+
+type ContentfulSnake struct {
+	Name       string        `json:"name"`
+	BodyColour ColourDetails `json:"bodyColour"`
+	HeadColour ColourDetails `json:"headColour"`
+	EyesColour ColourDetails `json:"eyesColour"`
+}
+
+type ColourDetails struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Value string `json:"value"`
 }
 
 type GameConfigResponse struct {

@@ -6,6 +6,16 @@
       fps
       scaleFactor
       foodNumber
+      waitingRoom {
+        waitingMessage
+        backgroundColour
+      }
+      snakes {
+        name
+        bodyColour
+        headcolour
+        eyesColour
+      }
     }
   }
 }
