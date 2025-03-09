@@ -157,15 +157,10 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 
 func serverSnake() {
 
-	serverColours := Colours{
-		Body: "yellow",
-		Head: "White",
-		Eyes: "green",
-	}
 	serverPlayer := Player{
-		Name:    "Server",
+		Name:    SnakeConfig.Name,
 		ID:      "Server",
-		Colours: serverColours,
+		Colours: SnakeConfig.Colours,
 	}
 	addToWaitingRoom(serverPlayer)
 }

@@ -51,6 +51,11 @@ type GameConfigResponse struct {
 	} `json:"data"`
 }
 
+type SnakeConfigType struct {
+	Colours
+	Name string `json:"name"`
+}
+
 var (
 	spaceID     string
 	accessToken string
@@ -58,6 +63,8 @@ var (
 )
 
 var GameConfigJSON Config
+
+var SnakeConfig SnakeConfigType
 
 func InitContentful() {
 
@@ -128,6 +135,7 @@ func FetchGameConfig() ([]GameConfig, error) {
 		log.Printf("Error decoding response: %v", err)
 		return nil, err
 	}
+	log.Println(respData)
 
 	if len(respData.Data.GameConfigCollection.Items) == 0 {
 		log.Println("No items found in the response.")
@@ -152,6 +160,15 @@ func LoadConfig() {
 		Side:        contentfulConfig.CanvasSize,
 		FoodStorage: contentfulConfig.FoodNumber,
 		Fps:         contentfulConfig.FPS,
+	}
+
+	SnakeConfig = SnakeConfigType{
+		Colours: Colours{
+			Head: contentfulConfig.SnakesCollection.Items[0].HeadColour.Value,
+			Body: contentfulConfig.SnakesCollection.Items[0].BodyColour.Value,
+			Eyes: contentfulConfig.SnakesCollection.Items[0].EyesColour.Value,
+		},
+		Name: contentfulConfig.SnakesCollection.Items[0].Name,
 	}
 	fmt.Printf("Loaded Contentful Config: %+v\n", GameConfigJSON)
 }
