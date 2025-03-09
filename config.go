@@ -5,9 +5,11 @@ import (
 )
 
 type Config struct {
-	Side        int `json:"side"`
-	FoodStorage int `json:"foodStorage"`
-	Fps         int `json:"fps"`
+	Side             int    `json:"side"`
+	FoodStorage      int    `json:"foodStorage"`
+	Fps              int    `json:"fps"`
+	BackgroundColour string `json:"backgroundColour"`
+	WaitingRoom      WaitingRoom
 }
 
 func GenerateFoodCoordinates(foodCount int) [][]int {

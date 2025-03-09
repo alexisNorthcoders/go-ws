@@ -14,6 +14,7 @@ import (
 type GameConfig struct {
 	EntryTitle       string           `json:"entryTitle"`
 	CanvasSize       int              `json:"canvasSize"`
+	BackgroundColour ColourDetails    `json:"backgroundColour"`
 	FPS              int              `json:"fps"`
 	ScaleFactor      int              `json:"scaleFactor"`
 	FoodNumber       int              `json:"foodNumber"`
@@ -157,9 +158,14 @@ func LoadConfig() {
 	contentfulConfig := configs[0]
 
 	GameConfigJSON = Config{
-		Side:        contentfulConfig.CanvasSize,
-		FoodStorage: contentfulConfig.FoodNumber,
-		Fps:         contentfulConfig.FPS,
+		Side:             contentfulConfig.CanvasSize,
+		FoodStorage:      contentfulConfig.FoodNumber,
+		Fps:              contentfulConfig.FPS,
+		BackgroundColour: contentfulConfig.BackgroundColour.Value,
+		WaitingRoom: WaitingRoom{
+			WaitingMessage:   contentfulConfig.WaitingRoom.WaitingMessage,
+			BackgroundColour: GameConfigJSON.WaitingRoom.BackgroundColour,
+		},
 	}
 
 	SnakeConfig = SnakeConfigType{

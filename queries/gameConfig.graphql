@@ -3,6 +3,7 @@
     items {
       entryTitle
       canvasSize
+      backgroundColour
       fps
       scaleFactor
       foodNumber
