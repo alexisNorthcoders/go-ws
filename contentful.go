@@ -162,9 +162,13 @@ func LoadConfig() {
 		FoodStorage:      contentfulConfig.FoodNumber,
 		Fps:              contentfulConfig.FPS,
 		BackgroundColour: contentfulConfig.BackgroundColour.Value,
-		WaitingRoom: WaitingRoom{
+		ScaleFactor:      contentfulConfig.ScaleFactor,
+		WaitingRoom: struct {
+			WaitingMessage   string `json:"waitingRoomMessage"`
+			BackgroundColour string `json:"backgroundColour"`
+		}{
 			WaitingMessage:   contentfulConfig.WaitingRoom.WaitingMessage,
-			BackgroundColour: GameConfigJSON.WaitingRoom.BackgroundColour,
+			BackgroundColour: contentfulConfig.WaitingRoom.BackgroundColour.Value,
 		},
 	}
 

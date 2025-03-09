@@ -9,7 +9,11 @@ type Config struct {
 	FoodStorage      int    `json:"foodStorage"`
 	Fps              int    `json:"fps"`
 	BackgroundColour string `json:"backgroundColour"`
-	WaitingRoom      WaitingRoom
+	ScaleFactor      int    `json:"scaleFactor"`
+	WaitingRoom      struct {
+		WaitingMessage   string `json:"waitingRoomMessage"`
+		BackgroundColour string `json:"backgroundColour"`
+	} `json:"waitingRoom"`
 }
 
 func GenerateFoodCoordinates(foodCount int) [][]int {
