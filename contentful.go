@@ -136,7 +136,6 @@ func FetchGameConfig() ([]GameConfig, error) {
 		log.Printf("Error decoding response: %v", err)
 		return nil, err
 	}
-	log.Println(respData)
 
 	if len(respData.Data.GameConfigCollection.Items) == 0 {
 		log.Println("No items found in the response.")
@@ -180,5 +179,5 @@ func LoadConfig() {
 		},
 		Name: contentfulConfig.SnakesCollection.Items[0].Name,
 	}
-	fmt.Printf("Loaded Contentful Config: %+v\n", GameConfigJSON)
+	fmt.Printf("Loaded Contentful Config")
 }

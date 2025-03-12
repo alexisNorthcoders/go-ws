@@ -32,11 +32,7 @@ type Player struct {
 	ID      string  `json:"id"`
 	Snake   Snake   `json:"snake,omitempty"`
 	Colours Colours `json:"colours,omitempty"`
-}
-
-type Snake struct {
-	X int `json:"x"`
-	Y int `json:"y"`
+	Type    string  `json:"type,omitempty"`
 }
 
 type Message struct {
@@ -51,6 +47,8 @@ type Message struct {
 // Map to store connected clients
 var clients = make(map[*websocket.Conn]bool)
 var waitingRoom = make(map[string]Player)
+var snakesMap = make(map[string]Player) // Store active game players
+var snakesMapMutex = &sync.Mutex{}      // Store active snakes
 var hasGameStarted bool
 var directions = []string{"UP", "DOWN", "RIGHT", "LEFT"}
 var rng = rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -105,10 +103,12 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 	switch message.Event {
 	case "ping":
 		conn.WriteMessage(websocket.TextMessage, []byte(`{"event":"pong"}`))
+
 	case "newPlayer":
 		hasGameStarted = false
 		log.Printf("New player joined: %s", message.Player.Name)
 		addToWaitingRoom(message.Player)
+
 	case "waitingRoomStatus":
 		log.Println("Sending waiting room status")
 		broadcastWaitingRoomStatus()
@@ -118,9 +118,8 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 			log.Println("Starting game...")
 			startGame()
 		}
-
 	case "playerMovement":
-		log.Printf("Player moved: %s, Id: %s, Key: %s", message.Player.Name, message.Player.ID, message.Key)
+		log.Printf("Player moved: %s, Id: %s, Key: %s, Position: x: %d, y: %d", message.Player.Name, message.Player.ID, message.Key, message.Player.Snake.X, message.Player.Snake.Y)
 		broadcast(message)
 
 	case "playerDisconnected":
@@ -150,19 +149,14 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 		}
 		broadcast(foodMessage)
 
+	case "updatePlayer":
+		log.Println("Updating player", message)
+		waitingRoom[message.ID] = message.Player
+		broadcastWaitingRoomStatus()
+
 	default:
 		log.Println("Unknown event received:", message.Event)
 	}
-}
-
-func serverSnake() {
-
-	serverPlayer := Player{
-		Name:    SnakeConfig.Name,
-		ID:      "Server",
-		Colours: SnakeConfig.Colours,
-	}
-	addToWaitingRoom(serverPlayer)
 }
 
 func moveSnake(direction string) {
@@ -177,6 +171,28 @@ func moveSnake(direction string) {
 	broadcast(movement)
 }
 
+func serverSnake() {
+
+	snake := Snake{
+		X:     10,
+		Y:     10,
+		Speed: Vector{X: 1, Y: 0},
+		Tail:  make([]Vector, 3),
+		Size:  3,
+		Scale: 10,
+	}
+
+	serverPlayer := Player{
+		Name:    SnakeConfig.Name,
+		ID:      "Server",
+		Colours: SnakeConfig.Colours,
+		Type:    "server",
+		Snake:   snake,
+	}
+
+	addToWaitingRoom(serverPlayer)
+}
+
 func startGameLoop() {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
@@ -185,8 +201,24 @@ func startGameLoop() {
 		if !hasGameStarted {
 			return
 		}
-		randomDirection := directions[rng.Intn(len(directions))]
-		moveSnake(randomDirection)
+
+		snakesMapMutex.Lock()
+		serverPlayer, exists := snakesMap["Server"]
+		if exists {
+			serverPlayer.Snake.Update()
+			snakesMap["Server"] = serverPlayer // Save back the updated snake
+		}
+		snakesMapMutex.Unlock()
+
+		// Broadcast the updated snake
+		message := Message{
+			Event:  "snake_update",
+			Player: serverPlayer,
+		}
+		broadcast(message)
+
+		//randomDirection := directions[rng.Intn(len(directions))]
+		//moveSnake(randomDirection)
 	}
 }
 
@@ -263,12 +295,17 @@ func startGame() {
 
 	broadcast(message)
 
-	go startGameLoop()
-
-	// Clear the waiting room since the game has started
+	// Move players from waitingRoom to snakesMap
 	waitingRoomMutex.Lock()
-	waitingRoom = make(map[string]Player)
+	snakesMapMutex.Lock()
+	for id, player := range waitingRoom {
+		snakesMap[id] = player
+	}
+	waitingRoom = make(map[string]Player) // Clear waiting room
 	waitingRoomMutex.Unlock()
+	snakesMapMutex.Unlock()
+
+	go startGameLoop()
 }
 
 func sendConfig(conn *websocket.Conn) {
@@ -353,6 +390,7 @@ func main() {
 	http.HandleFunc("/webhook", webhookHandler)
 
 	log.Println("WebSocket server started on port", port)
+
 	err := http.ListenAndServe(":"+port, nil)
 	if err != nil {
 		log.Fatal("ListenAndServe error:", err)

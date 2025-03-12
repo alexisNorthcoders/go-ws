@@ -2,12 +2,13 @@
 
 trap 'kill $(jobs -p)' EXIT
 
-
 while true; do
     inotifywait -e modify -r ./*.go
 
     echo "Restarting local server..."
-    pkill -f "go run ."
+
+    pkill -f "/tmp/go-build.*"
+
     go run . &
 
     echo "Building and restarting online server..."
