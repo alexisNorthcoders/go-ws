@@ -12,7 +12,6 @@ type Snake struct {
 	Tail   []Vector `json:"tail"`
 	Size   int      `json:"size"`
 	IsDead bool     `json:"isDead"`
-	Scale  int      `json:"scale"`
 }
 
 // Update moves the snake and shifts its tail
@@ -34,6 +33,21 @@ func (s *Snake) Update() {
 	}
 
 	// Move the snake
-	s.X += s.Speed.X * s.Scale
-	s.Y += s.Speed.Y * s.Scale
+	s.X += s.Speed.X * GameConfigJSON.GridSize
+	s.Y += s.Speed.Y * GameConfigJSON.GridSize
+
+	side := GameConfigJSON.Side
+	leftSectionSize := GameConfigJSON.LeftSectionSize
+
+	if s.X >= side+leftSectionSize {
+		s.X = 0 + leftSectionSize
+	} else if s.X < 0+leftSectionSize {
+		s.X = side + leftSectionSize
+	}
+
+	if s.Y >= side {
+		s.Y = 0
+	} else if s.Y < 0 {
+		s.Y = side
+	}
 }

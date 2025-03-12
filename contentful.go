@@ -14,6 +14,7 @@ import (
 type GameConfig struct {
 	EntryTitle       string           `json:"entryTitle"`
 	CanvasSize       int              `json:"canvasSize"`
+	LeftSectionSize  int              `json:"leftSectionSize"`
 	BackgroundColour ColourDetails    `json:"backgroundColour"`
 	FPS              int              `json:"fps"`
 	ScaleFactor      int              `json:"scaleFactor"`
@@ -158,10 +159,12 @@ func LoadConfig() {
 
 	GameConfigJSON = Config{
 		Side:             contentfulConfig.CanvasSize,
+		LeftSectionSize:  contentfulConfig.LeftSectionSize,
 		FoodStorage:      contentfulConfig.FoodNumber,
 		Fps:              contentfulConfig.FPS,
 		BackgroundColour: contentfulConfig.BackgroundColour.Value,
 		ScaleFactor:      contentfulConfig.ScaleFactor,
+		GridSize:         contentfulConfig.CanvasSize / contentfulConfig.ScaleFactor,
 		WaitingRoom: struct {
 			WaitingMessage   string `json:"waitingRoomMessage"`
 			BackgroundColour string `json:"backgroundColour"`

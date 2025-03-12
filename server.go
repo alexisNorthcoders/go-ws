@@ -179,7 +179,6 @@ func serverSnake() {
 		Speed: Vector{X: 1, Y: 0},
 		Tail:  make([]Vector, 3),
 		Size:  3,
-		Scale: 10,
 	}
 
 	serverPlayer := Player{
@@ -194,7 +193,7 @@ func serverSnake() {
 }
 
 func startGameLoop() {
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(time.Second / time.Duration(GameConfigJSON.Fps))
 	defer ticker.Stop()
 
 	for range ticker.C {
@@ -229,8 +228,8 @@ func addToWaitingRoom(player Player) {
 
 	// Assign a starting position
 	if nextPositionIndex < len(startingPositions) {
-		player.Snake.X = startingPositions[nextPositionIndex].x
-		player.Snake.Y = startingPositions[nextPositionIndex].y
+		player.Snake.X = startingPositions[nextPositionIndex].x*GameConfigJSON.GridSize + GameConfigJSON.LeftSectionSize
+		player.Snake.Y = startingPositions[nextPositionIndex].y * GameConfigJSON.GridSize
 		nextPositionIndex++
 	} else {
 		// Handle case where there are more players than predefined positions

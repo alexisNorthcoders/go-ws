@@ -3,6 +3,7 @@
     items {
       entryTitle
       canvasSize
+      leftSectionSize
       backgroundColour
       fps
       scaleFactor
