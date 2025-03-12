@@ -36,12 +36,13 @@ type Player struct {
 }
 
 type Message struct {
-	Event  string  `json:"event"`
-	Player Player  `json:"player,omitempty"`
-	Key    string  `json:"key,omitempty"`
-	ID     string  `json:"id,omitempty"`
-	Config *Config `json:"config,omitempty"`
-	Food   [][]int `json:"food,omitempty"`
+	Event     string            `json:"event"`
+	Player    Player            `json:"player,omitempty"`
+	Key       string            `json:"key,omitempty"`
+	ID        string            `json:"id,omitempty"`
+	Config    *Config           `json:"config,omitempty"`
+	Food      [][]int           `json:"food,omitempty"`
+	SnakesMap map[string]Player `json:"snakesMap,omitempty"`
 }
 
 // Map to store connected clients
@@ -51,8 +52,6 @@ var snakesMap = make(map[string]Player) // Store active game players
 var snakesMapMutex = &sync.Mutex{}      // Store active snakes
 var FoodCoordinates [][]int
 var hasGameStarted bool
-var directions = []string{"UP", "DOWN", "RIGHT", "LEFT"}
-var rng = rand.New(rand.NewSource(time.Now().UnixNano()))
 var clientsMutex sync.Mutex
 var waitingRoomMutex sync.Mutex
 
@@ -108,6 +107,12 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 	case "newPlayer":
 		hasGameStarted = false
 		log.Printf("New player joined: %s", message.Player.Name)
+		message.Player.Type = "player"
+		message.Player.Snake.Speed.X = 1
+		message.Player.Snake.Speed.Y = 0
+		message.Player.Snake.Tail = []Vector{}
+		message.Player.Snake.Size = 0
+
 		addToWaitingRoom(message.Player)
 
 	case "waitingRoomStatus":
@@ -121,7 +126,21 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 		}
 	case "playerMovement":
 		log.Printf("Player moved: %s, Id: %s, Key: %s, Position: x: %d, y: %d", message.Player.Name, message.Player.ID, message.Key, message.Player.Snake.X, message.Player.Snake.Y)
-		broadcast(message)
+
+		directionMap := map[string]struct{ X, Y int }{
+			"LEFT":  {X: -1, Y: 0},
+			"RIGHT": {X: 1, Y: 0},
+			"UP":    {X: 0, Y: -1},
+			"DOWN":  {X: 0, Y: 1},
+		}
+
+		if player, exists := snakesMap[message.Player.ID]; exists {
+			if speed, ok := directionMap[message.Key]; ok {
+				player.Snake.Speed.X = speed.X
+				player.Snake.Speed.Y = speed.Y
+				snakesMap[message.Player.ID] = player
+			}
+		}
 
 	case "playerDisconnected":
 		log.Printf("Player disconnected: %s", message.ID)
@@ -142,6 +161,7 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 			return
 		}
 		coords := [][]int{{rand.Intn(20)*GameConfigJSON.GridSize + GameConfigJSON.LeftSectionSize, rand.Intn(20) * GameConfigJSON.GridSize, id}}
+		updateFoodCoordinates(coords, &FoodCoordinates)
 		log.Printf("Updating food id: %s at: %v", message.ID, coords)
 
 		foodMessage := Message{
@@ -160,16 +180,14 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 	}
 }
 
-func moveSnake(direction string) {
-	movement := Message{
-		Event: "playerMovement",
-		Player: Player{
-			Name: "Server",
-			ID:   "Server",
-		},
-		Key: direction,
+func updateFoodCoordinates(coords [][]int, foodCoordinates *[][]int) {
+	for i, food := range *foodCoordinates {
+		if food[2] == coords[0][2] {
+			(*foodCoordinates)[i][0] = coords[0][0]
+			(*foodCoordinates)[i][1] = coords[0][1]
+			return
+		}
 	}
-	broadcast(movement)
 }
 
 func serverSnake() {
@@ -200,22 +218,17 @@ func startGameLoop() {
 		}
 
 		snakesMapMutex.Lock()
-		serverPlayer, exists := snakesMap["Server"]
-		if exists {
-			serverPlayer.Snake.Update()
-			snakesMap["Server"] = serverPlayer // Save back the updated snake
-		}
-		snakesMapMutex.Unlock()
+		for key, player := range snakesMap {
+			player.Snake.Update()
 
-		// Broadcast the updated snake
+			snakesMap[key] = player
+		}
 		message := Message{
-			Event:  "snake_update",
-			Player: serverPlayer,
+			Event:     "snake_update",
+			SnakesMap: snakesMap,
 		}
 		broadcast(message)
-
-		//randomDirection := directions[rng.Intn(len(directions))]
-		//moveSnake(randomDirection)
+		snakesMapMutex.Unlock()
 	}
 }
 
