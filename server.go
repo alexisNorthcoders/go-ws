@@ -49,6 +49,7 @@ var clients = make(map[*websocket.Conn]bool)
 var waitingRoom = make(map[string]Player)
 var snakesMap = make(map[string]Player) // Store active game players
 var snakesMapMutex = &sync.Mutex{}      // Store active snakes
+var FoodCoordinates [][]int
 var hasGameStarted bool
 var directions = []string{"UP", "DOWN", "RIGHT", "LEFT"}
 var rng = rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -140,7 +141,7 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 			fmt.Println("Invalid ID:", err)
 			return
 		}
-		coords := [][]int{{rand.Intn(20), rand.Intn(20), id}}
+		coords := [][]int{{rand.Intn(20)*GameConfigJSON.GridSize + GameConfigJSON.LeftSectionSize, rand.Intn(20) * GameConfigJSON.GridSize, id}}
 		log.Printf("Updating food id: %s at: %v", message.ID, coords)
 
 		foodMessage := Message{
@@ -174,11 +175,8 @@ func moveSnake(direction string) {
 func serverSnake() {
 
 	snake := Snake{
-		X:     10,
-		Y:     10,
 		Speed: Vector{X: 1, Y: 0},
-		Tail:  make([]Vector, 3),
-		Size:  3,
+		Tail:  []Vector{},
 	}
 
 	serverPlayer := Player{
@@ -308,12 +306,13 @@ func startGame() {
 }
 
 func sendConfig(conn *websocket.Conn) {
-	coords := GenerateFoodCoordinates(GameConfigJSON.FoodStorage)
+	FoodCoordinates = GenerateFoodCoordinates(GameConfigJSON.FoodStorage)
+	fmt.Println(FoodCoordinates)
 
 	configMessage := Message{
 		Event:  "config",
 		Config: &GameConfigJSON,
-		Food:   coords,
+		Food:   FoodCoordinates,
 	}
 	msgBytes, err := json.Marshal(configMessage)
 	if err != nil {
