@@ -24,7 +24,6 @@ func (s *Snake) Update() {
 	if s.IsDead {
 		return
 	}
-
 	// Check if snake's head collides with any food
 	for i := range FoodCoordinates {
 
@@ -33,14 +32,13 @@ func (s *Snake) Update() {
 			s.Tail = append(s.Tail, Vector{X: s.X, Y: s.Y})
 			fmt.Printf("Food eaten x:%d y:%d", s.X, s.Y)
 
-			newCoord := [][]int{{rand.Intn(20)*GameConfigJSON.GridSize + GameConfigJSON.LeftSectionSize, rand.Intn(20) * GameConfigJSON.GridSize, FoodCoordinates[i][2]}}
+			newCoord := [][]int{{rand.Intn(GameConfigJSON.ScaleFactor)*GameConfigJSON.GridSize + GameConfigJSON.LeftSectionSize, rand.Intn(GameConfigJSON.ScaleFactor) * GameConfigJSON.GridSize, FoodCoordinates[i][2]}}
 			FoodCoordinates[i] = newCoord[0]
 			foodMessage := Message{
 				Event: "updateFood",
 				Food:  newCoord,
 			}
 			broadcast(foodMessage)
-
 			break
 		}
 	}
