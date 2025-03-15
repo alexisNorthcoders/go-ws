@@ -7,6 +7,7 @@ This is a WebSocket server written in Go that facilitates real-time communicatio
 - Supports player connections and disconnections.
 - Processes and broadcasts player movements.
 - Ensures thread-safe client management using mutex locks.
+- Configuration stores in CMS allowing quick content or config updates without code changes ( colours, names, canvas sizes, messages, etc)
 
 ## Installation & Setup
 

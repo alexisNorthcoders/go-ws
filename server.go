@@ -53,7 +53,7 @@ var hasGameStarted bool
 var clientsMutex sync.Mutex
 var waitingRoomMutex sync.Mutex
 
-// position vars
+// position vars only 4 positions for now
 var startingPositions = []struct{ x, y int }{
 	{5, 5}, {15, 5}, {15, 5}, {15, 15},
 }
@@ -152,8 +152,17 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 		sendConfig(conn)
 
 	case "updatePlayer":
-		log.Println("Updating player", message)
-		waitingRoom[message.ID] = message.Player
+
+		snake, exists := waitingRoom[message.Player.ID]
+		if !exists {
+			log.Println("Player not found in waiting room")
+			return
+		}
+		snake.Colours.Body = message.Player.Colours.Body
+		snake.Colours.Head = message.Player.Colours.Head
+		snake.Colours.Eyes = message.Player.Colours.Eyes
+
+		waitingRoom[message.Player.ID] = snake
 		broadcastWaitingRoomStatus()
 
 	default:
