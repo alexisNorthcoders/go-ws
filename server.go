@@ -4,10 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math/rand"
 	"net/http"
 	"os"
-	"strconv"
 	"sync"
 	"time"
 
@@ -152,23 +150,6 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 		log.Println("Client requested game config")
 		serverSnake()
 		sendConfig(conn)
-
-	case "foodEaten":
-		log.Printf("Food Eaten id: %s", message.ID)
-		id, err := strconv.Atoi(message.ID)
-		if err != nil {
-			fmt.Println("Invalid ID:", err)
-			return
-		}
-		coords := [][]int{{rand.Intn(20)*GameConfigJSON.GridSize + GameConfigJSON.LeftSectionSize, rand.Intn(20) * GameConfigJSON.GridSize, id}}
-		updateFoodCoordinates(coords, &FoodCoordinates)
-		log.Printf("Updating food id: %s at: %v", message.ID, coords)
-
-		foodMessage := Message{
-			Event: "updateFood",
-			Food:  coords,
-		}
-		broadcast(foodMessage)
 
 	case "updatePlayer":
 		log.Println("Updating player", message)
