@@ -34,7 +34,7 @@ func (s *Snake) Update() {
 
 			newCoord := [][]int{{rand.Intn(GameConfigJSON.ScaleFactor)*GameConfigJSON.GridSize + GameConfigJSON.LeftSectionSize, rand.Intn(GameConfigJSON.ScaleFactor) * GameConfigJSON.GridSize, FoodCoordinates[i][2]}}
 			FoodCoordinates[i] = newCoord[0]
-			foodMessage := Message{
+			foodMessage := FoodUpdateMessage{
 				Event: "updateFood",
 				Food:  newCoord,
 			}
@@ -71,5 +71,14 @@ func (s *Snake) Update() {
 		s.Y = 0
 	} else if s.Y < 0 {
 		s.Y = side
+	}
+
+	// Check for self-collision
+	for _, segment := range s.Tail {
+		if s.X == segment.X && s.Y == segment.Y {
+			fmt.Println("Game over! Snake collided with itself.")
+			s.IsDead = true
+			break
+		}
 	}
 }

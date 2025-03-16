@@ -19,6 +19,10 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+type BroadcastMessage interface {
+	GetEvent() string
+}
+
 type Colours struct {
 	Body string `json:"body"`
 	Head string `json:"head"`
@@ -34,13 +38,47 @@ type Player struct {
 }
 
 type Message struct {
+	Event  string  `json:"event"`
+	Player Player  `json:"player,omitempty"`
+	Key    string  `json:"key,omitempty"`
+	ID     string  `json:"id,omitempty"`
+	Config *Config `json:"config,omitempty"`
+}
+
+type StartMessage struct {
+	Event string `json:"event"`
+}
+
+func (m StartMessage) GetEvent() string {
+	return m.Event
+}
+
+type SnakeUpdateMessage struct {
 	Event     string            `json:"event"`
-	Player    Player            `json:"player,omitempty"`
-	Key       string            `json:"key,omitempty"`
-	ID        string            `json:"id,omitempty"`
-	Config    *Config           `json:"config,omitempty"`
-	Food      [][]int           `json:"food,omitempty"`
-	SnakesMap map[string]Player `json:"snakesMap,omitempty"`
+	SnakesMap map[string]Player `json:"snakesMap"`
+}
+
+func (m SnakeUpdateMessage) GetEvent() string {
+	return m.Event
+}
+
+type ConfigMessage struct {
+	Event  string  `json:"event"`
+	Config *Config `json:"config,omitempty"`
+	Food   [][]int `json:"food"`
+}
+
+func (m ConfigMessage) GetEvent() string {
+	return m.Event
+}
+
+type FoodUpdateMessage struct {
+	Event string  `json:"event"`
+	Food  [][]int `json:"food"`
+}
+
+func (m FoodUpdateMessage) GetEvent() string {
+	return m.Event
 }
 
 // Map to store connected clients
@@ -135,6 +173,7 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 
 		if player, exists := snakesMap[message.Player.ID]; exists {
 			if speed, ok := directionMap[message.Key]; ok {
+				// check is snake is trying to move in the same axis
 				if (player.Snake.Speed.X != 0 && speed.X != 0) || (player.Snake.Speed.Y != 0 && speed.Y != 0) {
 					return
 				}
@@ -148,7 +187,6 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 		log.Printf("Player disconnected: %s", message.ID)
 		removeFromWaitingRoom(message.ID)
 		broadcastWaitingRoomStatus()
-		broadcast(message)
 
 	case "getConfig":
 		log.Println("Client requested game config")
@@ -213,11 +251,15 @@ func startGameLoop() {
 
 		snakesMapMutex.Lock()
 		for key, player := range snakesMap {
+			// skip if snake is dead
+			if player.Snake.IsDead {
+				continue
+			}
 			player.Snake.Update()
 
 			snakesMap[key] = player
 		}
-		message := Message{
+		message := SnakeUpdateMessage{
 			Event:     "snake_update",
 			SnakesMap: snakesMap,
 		}
@@ -293,7 +335,7 @@ func startGame() {
 	nextPositionIndex = 0
 	hasGameStarted = true
 
-	message := Message{
+	message := StartMessage{
 		Event: "startGame",
 	}
 
@@ -316,7 +358,7 @@ func sendConfig(conn *websocket.Conn) {
 	FoodCoordinates = GenerateFoodCoordinates(GameConfigJSON.FoodStorage)
 	fmt.Println(FoodCoordinates)
 
-	configMessage := Message{
+	configMessage := ConfigMessage{
 		Event:  "config",
 		Config: &GameConfigJSON,
 		Food:   FoodCoordinates,
@@ -337,7 +379,7 @@ func sendConfig(conn *websocket.Conn) {
 }
 
 // Broadcast message to all connected clients
-func broadcast(message Message) {
+func broadcast(message BroadcastMessage) {
 	msgBytes, err := json.Marshal(message)
 	if err != nil {
 		log.Println("Error encoding message:", err)
