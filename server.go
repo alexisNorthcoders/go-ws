@@ -123,7 +123,8 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 			startGame()
 		}
 	case "playerMovement":
-		log.Printf("Player moved: %s, Id: %s, Key: %s, Position: x: %d, y: %d", message.Player.Name, message.Player.ID, message.Key, message.Player.Snake.X, message.Player.Snake.Y)
+		log.Printf("Player moved: %s, Id: %s, Key: %s, Position: x: %d, y: %d",
+			message.Player.Name, message.Player.ID, message.Key, message.Player.Snake.X, message.Player.Snake.Y)
 
 		directionMap := map[string]struct{ X, Y int }{
 			"LEFT":  {X: -1, Y: 0},
@@ -134,6 +135,9 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 
 		if player, exists := snakesMap[message.Player.ID]; exists {
 			if speed, ok := directionMap[message.Key]; ok {
+				if (player.Snake.Speed.X != 0 && speed.X != 0) || (player.Snake.Speed.Y != 0 && speed.Y != 0) {
+					return
+				}
 				player.Snake.Speed.X = speed.X
 				player.Snake.Speed.Y = speed.Y
 				snakesMap[message.Player.ID] = player
