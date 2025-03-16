@@ -17,6 +17,7 @@ type Snake struct {
 	Tail   []Vector `json:"tail"`
 	Size   int      `json:"size"`
 	IsDead bool     `json:"isDead"`
+	Score  int      `json:"score"`
 }
 
 // Update moves the snake and shifts its tail
@@ -26,14 +27,16 @@ func (s *Snake) Update() {
 	}
 	// Check if snake's head collides with any food
 	for i := range FoodCoordinates {
-
 		if s.X == FoodCoordinates[i][0] && s.Y == FoodCoordinates[i][1] {
 			s.Size++
 			s.Tail = append(s.Tail, Vector{X: s.X, Y: s.Y})
-			fmt.Printf("Food eaten x:%d y:%d", s.X, s.Y)
+			fmt.Printf("Food eaten x:%d y:%d\n", s.X, s.Y)
+
+			s.Score += 50
 
 			newCoord := [][]int{{rand.Intn(GameConfigJSON.ScaleFactor)*GameConfigJSON.GridSize + GameConfigJSON.LeftSectionSize, rand.Intn(GameConfigJSON.ScaleFactor) * GameConfigJSON.GridSize, FoodCoordinates[i][2]}}
 			FoodCoordinates[i] = newCoord[0]
+
 			foodMessage := FoodUpdateMessage{
 				Event: "updateFood",
 				Food:  newCoord,
