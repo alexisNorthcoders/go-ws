@@ -45,11 +45,11 @@ type Message struct {
 	Config *Config `json:"config,omitempty"`
 }
 
-type StartMessage struct {
+type EventMessage struct {
 	Event string `json:"event"`
 }
 
-func (m StartMessage) GetEvent() string {
+func (m EventMessage) GetEvent() string {
 	return m.Event
 }
 
@@ -250,6 +250,7 @@ func startGameLoop() {
 		}
 
 		snakesMapMutex.Lock()
+		aliveCount := 0
 		for key, player := range snakesMap {
 			// skip if snake is dead
 			if player.Snake.IsDead {
@@ -258,7 +259,18 @@ func startGameLoop() {
 			player.Snake.Update()
 
 			snakesMap[key] = player
+			aliveCount++
 		}
+		if aliveCount <= 1 {
+			gameOverMessage := EventMessage{
+				Event: "gameover",
+			}
+			broadcast(gameOverMessage)
+			hasGameStarted = false
+			snakesMapMutex.Unlock()
+			return
+		}
+
 		message := SnakeUpdateMessage{
 			Event:     "snake_update",
 			SnakesMap: snakesMap,
@@ -335,7 +347,7 @@ func startGame() {
 	nextPositionIndex = 0
 	hasGameStarted = true
 
-	message := StartMessage{
+	message := EventMessage{
 		Event: "startGame",
 	}
 
