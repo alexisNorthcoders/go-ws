@@ -84,4 +84,19 @@ func (s *Snake) Update() {
 			break
 		}
 	}
+
+	// Check for collision with other snakes' tails
+	for _, otherSnake := range snakesMap {
+		if (otherSnake.Snake.X == s.X && otherSnake.Snake.Y == s.Y) || otherSnake.Snake.IsDead {
+			continue
+		}
+
+		for _, segment := range otherSnake.Snake.Tail {
+			if s.X == segment.X && s.Y == segment.Y {
+				fmt.Printf("Game over! Snake %p collided with another snake's tail.\n", s)
+				s.IsDead = true
+				return
+			}
+		}
+	}
 }
