@@ -16,7 +16,6 @@ func getRandomDirection(X int, Y int) (int, int) {
 			validDirections = append(validDirections, dir)
 		}
 	}
-
 	newDirection := validDirections[rng.Intn(len(validDirections))]
 
 	return newDirection.X, newDirection.Y

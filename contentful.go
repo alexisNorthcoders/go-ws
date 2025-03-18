@@ -173,6 +173,8 @@ func LoadConfig() {
 			BackgroundColour: contentfulConfig.WaitingRoom.BackgroundColour.Value,
 		},
 	}
+	// generate food coordinates
+	FoodCoordinates = GenerateFoodCoordinates(GameConfigJSON.FoodStorage)
 
 	SnakeConfig = SnakeConfigType{
 		Colours: Colours{

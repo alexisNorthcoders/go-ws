@@ -370,7 +370,6 @@ func startGame() {
 }
 
 func sendConfig(conn *websocket.Conn) {
-	FoodCoordinates = GenerateFoodCoordinates(GameConfigJSON.FoodStorage)
 	fmt.Println(FoodCoordinates)
 
 	configMessage := ConfigMessage{
