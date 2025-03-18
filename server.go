@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"maps"
+
 	"github.com/gorilla/websocket"
 )
 
@@ -90,6 +92,14 @@ var FoodCoordinates [][]int
 var hasGameStarted bool
 var clientsMutex sync.Mutex
 var waitingRoomMutex sync.Mutex
+var serverSnakeCollision = false
+
+var directionMap = map[string]struct{ X, Y int }{
+	"LEFT":  {X: -1, Y: 0},
+	"RIGHT": {X: 1, Y: 0},
+	"UP":    {X: 0, Y: -1},
+	"DOWN":  {X: 0, Y: 1},
+}
 
 // position vars only 4 positions for now
 var startingPositions = []struct{ x, y int }{
@@ -164,13 +174,6 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 		log.Printf("Player moved: %s, Id: %s, Key: %s, Position: x: %d, y: %d",
 			message.Player.Name, message.Player.ID, message.Key, message.Player.Snake.X, message.Player.Snake.Y)
 
-		directionMap := map[string]struct{ X, Y int }{
-			"LEFT":  {X: -1, Y: 0},
-			"RIGHT": {X: 1, Y: 0},
-			"UP":    {X: 0, Y: -1},
-			"DOWN":  {X: 0, Y: 1},
-		}
-
 		if player, exists := snakesMap[message.Player.ID]; exists {
 			if speed, ok := directionMap[message.Key]; ok {
 				// check is snake is trying to move in the same axis
@@ -212,21 +215,12 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 	}
 }
 
-func updateFoodCoordinates(coords [][]int, foodCoordinates *[][]int) {
-	for i, food := range *foodCoordinates {
-		if food[2] == coords[0][2] {
-			(*foodCoordinates)[i][0] = coords[0][0]
-			(*foodCoordinates)[i][1] = coords[0][1]
-			return
-		}
-	}
-}
-
 func serverSnake() {
 
 	snake := Snake{
 		Speed: Vector{X: 1, Y: 0},
 		Tail:  []Vector{},
+		Type:  "server",
 	}
 
 	serverPlayer := Player{
@@ -244,39 +238,50 @@ func startGameLoop() {
 	ticker := time.NewTicker(time.Second / time.Duration(GameConfigJSON.Fps))
 	defer ticker.Stop()
 
-	for range ticker.C {
-		if !hasGameStarted {
-			return
-		}
+	// ticker for server snake
+	moveTicker := time.NewTicker(3 * time.Second)
+	defer moveTicker.Stop()
 
-		snakesMapMutex.Lock()
-		aliveCount := 0
-		for key, player := range snakesMap {
-			// skip if snake is dead
-			if player.Snake.IsDead {
-				continue
+	for {
+		select {
+		case <-ticker.C: // Main game loop running at FPS rate
+			if !hasGameStarted {
+				return
 			}
-			player.Snake.Update()
 
-			snakesMap[key] = player
-			aliveCount++
-		}
-		if aliveCount <= 1 {
-			gameOverMessage := EventMessage{
-				Event: "gameover",
+			snakesMapMutex.Lock()
+			aliveCount := 0
+
+			for key, player := range snakesMap {
+				if player.Snake.IsDead {
+					continue
+				}
+
+				player.Snake.Update()
+				snakesMap[key] = player
+				aliveCount++
 			}
-			broadcast(gameOverMessage)
-			hasGameStarted = false
+
+			if aliveCount <= 1 {
+				gameOverMessage := EventMessage{
+					Event: "gameover",
+				}
+				broadcast(gameOverMessage)
+				hasGameStarted = false
+				snakesMapMutex.Unlock()
+				return
+			}
+
+			message := SnakeUpdateMessage{
+				Event:     "snake_update",
+				SnakesMap: snakesMap,
+			}
+			broadcast(message)
 			snakesMapMutex.Unlock()
-			return
-		}
 
-		message := SnakeUpdateMessage{
-			Event:     "snake_update",
-			SnakesMap: snakesMap,
+		case <-moveTicker.C: //move server snake every 3 seconds
+			moveSnake()
 		}
-		broadcast(message)
-		snakesMapMutex.Unlock()
 	}
 }
 
@@ -356,9 +361,7 @@ func startGame() {
 	// Move players from waitingRoom to snakesMap
 	waitingRoomMutex.Lock()
 	snakesMapMutex.Lock()
-	for id, player := range waitingRoom {
-		snakesMap[id] = player
-	}
+	maps.Copy(snakesMap, waitingRoom)
 	waitingRoom = make(map[string]Player) // Clear waiting room
 	waitingRoomMutex.Unlock()
 	snakesMapMutex.Unlock()
@@ -409,6 +412,12 @@ func broadcast(message BroadcastMessage) {
 			delete(clients, conn)
 		}
 	}
+}
+
+func moveSnake() {
+	player := snakesMap["Server"]
+	player.Snake.Speed.X, player.Snake.Speed.Y = getRandomDirection(player.Snake.Speed.X, player.Snake.Speed.Y)
+	snakesMap["Server"] = player
 }
 
 func handleDisconnection(conn *websocket.Conn) {
