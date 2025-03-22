@@ -268,6 +268,10 @@ func startGameLoop() {
 				}
 				broadcast(gameOverMessage)
 				hasGameStarted = false
+
+				// Reset the snakesMap
+				snakesMap = make(map[string]Player)
+
 				snakesMapMutex.Unlock()
 				return
 			}
