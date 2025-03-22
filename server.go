@@ -21,11 +21,6 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-type Client struct {
-	isConnected bool
-	playerId    string
-}
-
 type BroadcastMessage interface {
 	GetEvent() string
 }
@@ -84,20 +79,37 @@ type FoodUpdateMessage struct {
 	Food  [][]int `json:"food"`
 }
 
+// Room structure to hold room data.
+type Room struct {
+	id                string
+	players           []*websocket.Conn
+	snakesMap         map[string]Player
+	snakesMapMutex    sync.Mutex
+	nextPositionIndex int
+	waitingRoom       map[string]Player
+	waitingRoomMutex  sync.Mutex
+	hasGameStarted    bool
+	aliveCount        int
+}
+
+type Client struct {
+	isConnected bool
+	playerId    string
+	roomId      string // The room that the player belongs to.
+}
+
 func (m FoodUpdateMessage) GetEvent() string {
 	return m.Event
 }
 
 // Map to store connected clients
 var clients = make(map[*websocket.Conn]Client)
-var waitingRoom = make(map[string]Player)
-var snakesMap = make(map[string]Player) // Store active game players
-var snakesMapMutex = &sync.Mutex{}      // Store active snakes
+
 var FoodCoordinates [][]int
-var hasGameStarted bool
 var clientsMutex sync.Mutex
-var waitingRoomMutex sync.Mutex
 var serverSnakeCollision = false
+var rooms = make(map[string]*Room)
+var roomsMutex sync.Mutex
 
 var directionMap = map[string]struct{ X, Y int }{
 	"LEFT":  {X: -1, Y: 0},
@@ -110,45 +122,91 @@ var directionMap = map[string]struct{ X, Y int }{
 var startingPositions = []struct{ x, y int }{
 	{5, 5}, {15, 5}, {15, 5}, {15, 15},
 }
-var nextPositionIndex = 0
 
-func handleConnections(w http.ResponseWriter, r *http.Request) {
-
+func handleConnections(w http.ResponseWriter, req *http.Request) {
 	// Extract the playerId from the URL query parameters
-	playerId := r.URL.Query().Get("playerId")
+	playerId := req.URL.Query().Get("playerId")
 	if playerId == "" {
 		log.Println("Player ID is missing in the URL")
+		http.Error(w, "Player ID is required", http.StatusBadRequest)
 		return
 	}
 
 	log.Printf("Player ID extracted: %s", playerId)
+
 	// Upgrade HTTP request to WebSocket
-	conn, err := upgrader.Upgrade(w, r, nil)
+	conn, err := upgrader.Upgrade(w, req, nil)
 	if err != nil {
 		log.Println("Error upgrading connection:", err)
 		return
 	}
 	defer conn.Close()
 
-	// Add client to the map
+	// Find or create a room for the player
+	roomId := findOrCreateRoom(conn, playerId)
+
+	// Lock the room and add the client
+	roomsMutex.Lock()
+	room, exists := rooms[roomId]
+	roomsMutex.Unlock()
+
+	if !exists {
+		log.Println("Failed to find or create room")
+		return
+	}
+
 	clientsMutex.Lock()
-	clients[conn] = Client{isConnected: true, playerId: playerId}
+	clients[conn] = Client{
+		isConnected: true,
+		playerId:    playerId,
+		roomId:      roomId,
+	}
 	clientsMutex.Unlock()
 
-	log.Println("Client connected")
+	log.Printf("Client connected to room: %s", roomId)
 
+	// Listen for messages from the client
 	for {
-		// Read message from client
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
 			log.Println("Read error or client disconnected:", err)
-			handleDisconnection(conn)
+			room.handleDisconnection(conn)
 			break
 		}
 
-		// Process message
+		// Process the message in the context of the room
 		processMessage(conn, msg)
 	}
+}
+
+func findOrCreateRoom(conn *websocket.Conn, playerId string) string {
+	// Try to find an available room with space (max 2 players)
+	roomsMutex.Lock()
+	defer roomsMutex.Unlock()
+
+	for roomId, room := range rooms {
+		if len(room.players) < 2 {
+			// Add the player to the room
+			room.players = append(room.players, conn)
+			log.Printf("Player %s joined room %s", playerId, roomId)
+			return roomId
+		}
+	}
+
+	// If no room with space, create a new room
+	roomId := generateRoomId()
+	rooms[roomId] = &Room{
+		id:          roomId,
+		players:     []*websocket.Conn{conn},
+		waitingRoom: make(map[string]Player),
+		snakesMap:   make(map[string]Player),
+	}
+	log.Printf("Player %s created new room %s", playerId, roomId)
+	return roomId
+}
+
+func generateRoomId() string {
+	return "room_" + fmt.Sprintf("%d", len(rooms)+1)
 }
 
 // Process incoming messages
@@ -157,6 +215,20 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 	err := json.Unmarshal(msg, &message)
 	if err != nil {
 		log.Println("Error parsing message:", err)
+		return
+	}
+
+	// Retrieve the room ID of the player
+	client := clients[conn]
+	roomId := client.roomId
+
+	// Lock the room for safe concurrent access
+	roomsMutex.Lock()
+	room, exists := rooms[roomId]
+	roomsMutex.Unlock()
+
+	if !exists {
+		log.Printf("Room %s not found for player %s", roomId, message.Player.ID)
 		return
 	}
 
@@ -171,7 +243,7 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 		}
 
 	case "newPlayer":
-		hasGameStarted = false
+		room.hasGameStarted = false
 		log.Printf("New player joined: %s", message.Player.Name)
 		message.Player.Type = "player"
 		message.Player.Snake.Speed.X = 1
@@ -179,22 +251,23 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 		message.Player.Snake.Tail = []Vector{}
 		message.Player.Snake.Size = 0
 
-		addToWaitingRoom(message.Player)
+		room.addToWaitingRoom(message.Player)
 
 	case "waitingRoomStatus":
 		log.Println("Sending waiting room status")
-		broadcastWaitingRoomStatus()
+		room.broadcastWaitingRoomStatus()
 
 	case "startGame":
-		if len(waitingRoom) > 0 {
+
+		if len(room.waitingRoom) > 0 {
 			log.Println("Starting game...")
-			startGame()
+			room.startGame()
 		}
 	case "playerMovement":
 		log.Printf("Player moved: %s, Id: %s, Key: %s, Position: x: %d, y: %d",
 			message.Player.Name, message.Player.ID, message.Key, message.Player.Snake.X, message.Player.Snake.Y)
 
-		if player, exists := snakesMap[message.Player.ID]; exists {
+		if player, exists := room.snakesMap[message.Player.ID]; exists {
 			if speed, ok := directionMap[message.Key]; ok {
 				// check is snake is trying to move in the same axis
 				if (player.Snake.Speed.X != 0 && speed.X != 0) || (player.Snake.Speed.Y != 0 && speed.Y != 0) {
@@ -202,23 +275,23 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 				}
 				player.Snake.Speed.X = speed.X
 				player.Snake.Speed.Y = speed.Y
-				snakesMap[message.Player.ID] = player
+				room.snakesMap[message.Player.ID] = player
 			}
 		}
 
 	case "playerDisconnected":
 		log.Printf("Player disconnected: %s", message.ID)
-		removeFromWaitingRoom(message.ID)
-		broadcastWaitingRoomStatus()
+		room.removeFromWaitingRoom(message.ID)
+		room.broadcastWaitingRoomStatus()
 
 	case "getConfig":
 		log.Println("Client requested game config")
-		serverSnake()
+		room.serverSnake()
 		sendConfig(conn)
 
 	case "updatePlayer":
 
-		snake, exists := waitingRoom[message.Player.ID]
+		snake, exists := room.waitingRoom[message.Player.ID]
 		if !exists {
 			log.Println("Player not found in waiting room")
 			return
@@ -227,15 +300,15 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 		snake.Colours.Head = message.Player.Colours.Head
 		snake.Colours.Eyes = message.Player.Colours.Eyes
 
-		waitingRoom[message.Player.ID] = snake
-		broadcastWaitingRoomStatus()
+		room.waitingRoom[message.Player.ID] = snake
+		room.broadcastWaitingRoomStatus()
 
 	default:
 		log.Println("Unknown event received:", message.Event)
 	}
 }
 
-func serverSnake() {
+func (r *Room) serverSnake() {
 
 	snake := Snake{
 		Speed: Vector{X: 1, Y: 0},
@@ -251,10 +324,10 @@ func serverSnake() {
 		Snake:   snake,
 	}
 
-	addToWaitingRoom(serverPlayer)
+	r.addToWaitingRoom(serverPlayer)
 }
 
-func startGameLoop() {
+func (r *Room) startGameLoop() {
 	ticker := time.NewTicker(time.Second / time.Duration(GameConfigJSON.Fps))
 	defer ticker.Stop()
 
@@ -265,84 +338,89 @@ func startGameLoop() {
 	for {
 		select {
 		case <-ticker.C: // Main game loop running at FPS rate
-			if !hasGameStarted {
+			if !r.hasGameStarted {
+				println("game not started")
 				return
 			}
 
-			snakesMapMutex.Lock()
-			aliveCount := 0
+			//	r.snakesMapMutex.Lock()
+			r.aliveCount = 0
 
-			for key, player := range snakesMap {
+			for key, player := range r.snakesMap {
 				if player.Snake.IsDead {
+					println("dead snake")
 					continue
 				}
 
-				player.Snake.Update()
-				snakesMap[key] = player
-				aliveCount++
+				player.Snake.Update(r)
+				println("updating player")
+				r.snakesMap[key] = player
+				r.aliveCount++
 			}
 
-			if aliveCount <= 1 {
+			if r.aliveCount <= 1 {
 				gameOverMessage := EventMessage{
 					Event: "gameover",
 				}
-				broadcast(gameOverMessage)
-				hasGameStarted = false
+				r.broadcast(gameOverMessage)
+				r.hasGameStarted = false
 
 				// Reset the snakesMap
-				snakesMap = make(map[string]Player)
+				r.snakesMap = make(map[string]Player)
 
-				snakesMapMutex.Unlock()
+				//	r.snakesMapMutex.Unlock()
+				println("gameover event")
 				return
 			}
 
 			message := SnakeUpdateMessage{
 				Event:     "snake_update",
-				SnakesMap: snakesMap,
+				SnakesMap: r.snakesMap,
 			}
-			broadcast(message)
-			snakesMapMutex.Unlock()
+			println("snakeupdate broadcast")
+			r.broadcast(message)
+		//	r.snakesMapMutex.Unlock()
 
 		case <-moveTicker.C: //move server snake every 3 seconds
-			moveSnake()
+			r.moveSnake()
 		}
 	}
 }
 
 // Add player to the waiting room
-func addToWaitingRoom(player Player) {
-	waitingRoomMutex.Lock()
-	defer waitingRoomMutex.Unlock()
+func (r *Room) addToWaitingRoom(player Player) {
+	r.waitingRoomMutex.Lock()
+	defer r.waitingRoomMutex.Unlock()
 
 	// Assign a starting position
-	if nextPositionIndex < len(startingPositions) {
-		player.Snake.X = startingPositions[nextPositionIndex].x*GameConfigJSON.GridSize + GameConfigJSON.LeftSectionSize
-		player.Snake.Y = startingPositions[nextPositionIndex].y * GameConfigJSON.GridSize
-		nextPositionIndex++
+	if r.nextPositionIndex < len(startingPositions) {
+		player.Snake.X = startingPositions[r.nextPositionIndex].x*GameConfigJSON.GridSize + GameConfigJSON.LeftSectionSize
+		player.Snake.Y = startingPositions[r.nextPositionIndex].y * GameConfigJSON.GridSize
+		r.nextPositionIndex++
 	} else {
 		// Handle case where there are more players than predefined positions
 		player.Snake.X = 0 // Default position if needed
 		player.Snake.Y = 0
 	}
 
-	waitingRoom[player.ID] = player
+	r.waitingRoom[player.ID] = player
 }
 
 // Remove player from the waiting room
-func removeFromWaitingRoom(playerID string) {
-	waitingRoomMutex.Lock()
-	delete(waitingRoom, playerID)
-	waitingRoomMutex.Unlock()
+func (r *Room) removeFromWaitingRoom(playerID string) {
+	r.waitingRoomMutex.Lock()
+	delete(r.waitingRoom, playerID)
+	r.waitingRoomMutex.Unlock()
 }
 
 // Broadcast the current waiting room status
-func broadcastWaitingRoomStatus() {
-	waitingRoomMutex.Lock()
-	players := make([]Player, 0, len(waitingRoom))
-	for _, player := range waitingRoom {
+func (r *Room) broadcastWaitingRoomStatus() {
+	r.waitingRoomMutex.Lock()
+	defer r.waitingRoomMutex.Unlock()
+	players := make([]Player, 0, len(r.waitingRoom))
+	for _, player := range r.waitingRoom {
 		players = append(players, player)
 	}
-	waitingRoomMutex.Unlock()
 
 	// Assign players to JSON and include in the message
 	messageBytes, err := json.Marshal(struct {
@@ -372,25 +450,25 @@ func broadcastWaitingRoomStatus() {
 }
 
 // Start the game when all players are ready
-func startGame() {
-	nextPositionIndex = 0
-	hasGameStarted = true
+func (r *Room) startGame() {
+	r.nextPositionIndex = 0
+	r.hasGameStarted = true
 
 	message := EventMessage{
 		Event: "startGame",
 	}
 
-	broadcast(message)
+	r.broadcast(message)
 
 	// Move players from waitingRoom to snakesMap
-	waitingRoomMutex.Lock()
-	snakesMapMutex.Lock()
-	maps.Copy(snakesMap, waitingRoom)
-	waitingRoom = make(map[string]Player) // Clear waiting room
-	waitingRoomMutex.Unlock()
-	snakesMapMutex.Unlock()
+	r.waitingRoomMutex.Lock()
+	r.snakesMapMutex.Lock()
+	maps.Copy(r.snakesMap, r.waitingRoom)
+	r.waitingRoom = make(map[string]Player) // Clear waiting room
+	r.waitingRoomMutex.Unlock()
+	r.snakesMapMutex.Unlock()
 
-	go startGameLoop()
+	go r.startGameLoop()
 }
 
 func sendConfig(conn *websocket.Conn) {
@@ -417,17 +495,18 @@ func sendConfig(conn *websocket.Conn) {
 }
 
 // Broadcast message to all connected clients
-func broadcast(message BroadcastMessage) {
+func (r *Room) broadcast(message BroadcastMessage) {
 	msgBytes, err := json.Marshal(message)
 	if err != nil {
 		log.Println("Error encoding message:", err)
 		return
 	}
 
-	clientsMutex.Lock()
-	defer clientsMutex.Unlock()
+	// Lock the room to prevent concurrent modification of players during broadcast
+	r.snakesMapMutex.Lock()
+	defer r.snakesMapMutex.Unlock()
 
-	for conn := range clients {
+	for _, conn := range r.players {
 		err := conn.WriteMessage(websocket.TextMessage, msgBytes)
 		if err != nil {
 			log.Println("Error sending message to client:", err)
@@ -437,13 +516,13 @@ func broadcast(message BroadcastMessage) {
 	}
 }
 
-func moveSnake() {
-	player := snakesMap["Server"]
+func (r *Room) moveSnake() {
+	player := r.snakesMap["Server"]
 	player.Snake.Speed.X, player.Snake.Speed.Y = getRandomDirection(player.Snake.Speed.X, player.Snake.Speed.Y)
-	snakesMap["Server"] = player
+	r.snakesMap["Server"] = player
 }
 
-func handleDisconnection(conn *websocket.Conn) {
+func (r *Room) handleDisconnection(conn *websocket.Conn) {
 	log.Printf("Handling disconnection")
 
 	clientsMutex.Lock()
@@ -477,12 +556,12 @@ func handleDisconnection(conn *websocket.Conn) {
 		clientsMutex.Unlock()
 
 		// Remove from snakesMap if still disconnected
-		snakesMapMutex.Lock()
-		delete(snakesMap, playerId)
-		snakesMapMutex.Unlock()
+		r.snakesMapMutex.Lock()
+		delete(r.snakesMap, playerId)
+		r.snakesMapMutex.Unlock()
 
-		removeFromWaitingRoom(playerId)
-		broadcastWaitingRoomStatus()
+		r.removeFromWaitingRoom(playerId)
+		r.broadcastWaitingRoomStatus()
 
 		log.Printf("Player %s removed from snakesMap after grace period", playerId)
 	}()

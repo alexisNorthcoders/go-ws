@@ -22,7 +22,7 @@ type Snake struct {
 }
 
 // Update moves the snake and shifts its tail
-func (s *Snake) Update() {
+func (s *Snake) Update(room *Room) {
 	if s.IsDead {
 		return
 	}
@@ -42,7 +42,7 @@ func (s *Snake) Update() {
 				Event: "updateFood",
 				Food:  newCoord,
 			}
-			broadcast(foodMessage)
+			room.broadcast(foodMessage)
 			break
 		}
 	}
@@ -87,7 +87,7 @@ func (s *Snake) Update() {
 	}
 
 	// Check for collision with other snakes' tails
-	for _, otherSnake := range snakesMap {
+	for _, otherSnake := range room.snakesMap {
 		if (otherSnake.Snake.X == s.X && otherSnake.Snake.Y == s.Y) || otherSnake.Snake.IsDead || (otherSnake.Snake.Type == "server" && !serverSnakeCollision) {
 			continue
 		}
