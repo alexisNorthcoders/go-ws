@@ -21,6 +21,11 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+type Client struct {
+	isConnected bool
+	playerId    string
+}
+
 type BroadcastMessage interface {
 	GetEvent() string
 }
@@ -84,7 +89,7 @@ func (m FoodUpdateMessage) GetEvent() string {
 }
 
 // Map to store connected clients
-var clients = make(map[*websocket.Conn]bool)
+var clients = make(map[*websocket.Conn]Client)
 var waitingRoom = make(map[string]Player)
 var snakesMap = make(map[string]Player) // Store active game players
 var snakesMapMutex = &sync.Mutex{}      // Store active snakes
@@ -108,6 +113,15 @@ var startingPositions = []struct{ x, y int }{
 var nextPositionIndex = 0
 
 func handleConnections(w http.ResponseWriter, r *http.Request) {
+
+	// Extract the playerId from the URL query parameters
+	playerId := r.URL.Query().Get("playerId")
+	if playerId == "" {
+		log.Println("Player ID is missing in the URL")
+		return
+	}
+
+	log.Printf("Player ID extracted: %s", playerId)
 	// Upgrade HTTP request to WebSocket
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -118,7 +132,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 	// Add client to the map
 	clientsMutex.Lock()
-	clients[conn] = true
+	clients[conn] = Client{isConnected: true, playerId: playerId}
 	clientsMutex.Unlock()
 
 	log.Println("Client connected")
@@ -148,7 +162,13 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 
 	switch message.Event {
 	case "ping":
-		conn.WriteMessage(websocket.TextMessage, []byte(`{"event":"pong"}`))
+		clientsMutex.Lock()
+		err := conn.WriteMessage(websocket.TextMessage, []byte(`{"event":"pong"}`))
+		clientsMutex.Unlock()
+
+		if err != nil {
+			log.Println("Error sending pong:", err)
+		}
 
 	case "newPlayer":
 		hasGameStarted = false
@@ -424,9 +444,48 @@ func moveSnake() {
 }
 
 func handleDisconnection(conn *websocket.Conn) {
+	log.Printf("Handling disconnection")
+
 	clientsMutex.Lock()
+	client, exists := clients[conn]
+	if !exists {
+		clientsMutex.Unlock()
+		log.Println("Client not found in map")
+		return
+	}
+	playerId := client.playerId
+
+	// Remove client from clients map immediately
 	delete(clients, conn)
 	clientsMutex.Unlock()
+	log.Println("Client removed from clients map")
+
+	// Grace period to allow for quick reconnections
+	go func() {
+		time.Sleep(3 * time.Second) // Grace period
+
+		// Check if the player reconnected
+		clientsMutex.Lock()
+		for _, c := range clients {
+			if c.playerId == playerId {
+				// Player reconnected, skip removal
+				clientsMutex.Unlock()
+				log.Printf("Player %s reconnected, skipping removal", playerId)
+				return
+			}
+		}
+		clientsMutex.Unlock()
+
+		// Remove from snakesMap if still disconnected
+		snakesMapMutex.Lock()
+		delete(snakesMap, playerId)
+		snakesMapMutex.Unlock()
+
+		removeFromWaitingRoom(playerId)
+		broadcastWaitingRoomStatus()
+
+		log.Printf("Player %s removed from snakesMap after grace period", playerId)
+	}()
 }
 
 func webhookHandler(w http.ResponseWriter, r *http.Request) {
