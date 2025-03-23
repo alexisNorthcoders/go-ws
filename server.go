@@ -178,16 +178,15 @@ func handleConnections(w http.ResponseWriter, req *http.Request) {
 
 	// Listen for messages from the client
 	for {
-		_, msg, err := conn.ReadMessage()
+		msgType, msg, err := conn.ReadMessage()
 		if err != nil {
 			log.Println("Read error or client disconnected:", err)
 			room.handleDisconnection(conn)
 			break
 		}
 
-		// Process the message in the context of the room
-
-		processMessage(conn, msg)
+		// Pass the message type to processMessage
+		processMessage(conn, msg, msgType)
 	}
 }
 
@@ -223,7 +222,18 @@ func generateRoomId() string {
 }
 
 // Process incoming messages
-func processMessage(conn *websocket.Conn, msg []byte) {
+func processMessage(conn *websocket.Conn, msg []byte, msgType int) {
+
+	if msgType == websocket.BinaryMessage && len(msg) == 1 && msg[0] == 1 {
+		clientsMutex.Lock()
+		err := conn.WriteMessage(websocket.BinaryMessage, []byte{2})
+		clientsMutex.Unlock()
+
+		if err != nil {
+			log.Println("Error sending binary pong:", err)
+		}
+		return
+	}
 
 	var message Message
 	err := json.Unmarshal(msg, &message)
@@ -247,16 +257,6 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 	}
 
 	switch message.Event {
-	case "ping":
-		log.Println("ping")
-		clientsMutex.Lock()
-		err := conn.WriteMessage(websocket.TextMessage, []byte(`{"event":"pong"}`))
-		clientsMutex.Unlock()
-
-		if err != nil {
-			log.Println("Error sending pong:", err)
-		}
-
 	case "newPlayer":
 		if !room.hasGameStarted {
 
@@ -280,12 +280,9 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 			room.startGame()
 		}
 	case "playerMovement":
-		log.Printf("New connection: %s, Total connections: %d", conn.RemoteAddr(), len(clients))
+		//log.Printf("Player moved: Id: %s, Key: %s", message.ID, message.Key)
 
-		log.Printf("Player moved: %s, Id: %s, Key: %s, Position: x: %d, y: %d",
-			message.Player.Name, message.Player.ID, message.Key, message.Player.Snake.X, message.Player.Snake.Y)
-
-		if player, exists := room.snakesMap[message.Player.ID]; exists {
+		if player, exists := room.snakesMap[message.ID]; exists {
 			if speed, ok := directionMap[message.Key]; ok {
 				// check is snake is trying to move in the same axis
 				if (player.Snake.Speed.X != 0 && speed.X != 0) || (player.Snake.Speed.Y != 0 && speed.Y != 0) {
@@ -293,7 +290,7 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 				}
 				player.Snake.Speed.X = speed.X
 				player.Snake.Speed.Y = speed.Y
-				room.snakesMap[message.Player.ID] = player
+				room.snakesMap[message.ID] = player
 			}
 		}
 

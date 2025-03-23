@@ -31,7 +31,7 @@ func (s *Snake) Update(room *Room) {
 		if s.X == room.FoodCoordinates[i][0] && s.Y == room.FoodCoordinates[i][1] {
 			s.Size++
 			s.Tail = append(s.Tail, Vector{X: s.X, Y: s.Y})
-			fmt.Printf("Food eaten x:%d y:%d\n", s.X, s.Y)
+			//fmt.Printf("Food eaten x:%d y:%d\n", s.X, s.Y)
 
 			s.Score += 50
 
