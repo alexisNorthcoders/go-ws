@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"math/rand"
 )
 
@@ -31,7 +30,6 @@ func (s *Snake) Update(room *Room) {
 		if s.X == room.FoodCoordinates[i][0] && s.Y == room.FoodCoordinates[i][1] {
 			s.Size++
 			s.Tail = append(s.Tail, Vector{X: s.X, Y: s.Y})
-			//fmt.Printf("Food eaten x:%d y:%d\n", s.X, s.Y)
 
 			s.Score += 50
 
@@ -80,9 +78,8 @@ func (s *Snake) Update(room *Room) {
 	// Check for self-collision
 	for _, segment := range s.Tail {
 		if s.X == segment.X && s.Y == segment.Y {
-			fmt.Println("Game over! Snake collided with itself.")
 			s.IsDead = true
-			break
+			return
 		}
 	}
 
@@ -97,7 +94,6 @@ func (s *Snake) Update(room *Room) {
 				return
 			}
 			if s.X == segment.X && s.Y == segment.Y {
-				fmt.Printf("Game over! Snake %p collided with another snake's tail.\n", s)
 				s.IsDead = true
 				return
 			}

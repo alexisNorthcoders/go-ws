@@ -70,8 +70,6 @@ var SnakeConfig SnakeConfigType
 
 func InitContentful() {
 
-	log.Println("InitContentful() called")
-
 	err := godotenv.Load()
 	if err != nil {
 		log.Println("Warning: No .env file found, using system environment variables")
@@ -182,5 +180,5 @@ func LoadConfig() {
 		},
 		Name: contentfulConfig.SnakesCollection.Items[0].Name,
 	}
-	fmt.Printf("Loaded Contentful Config")
+	log.Println("Loaded Contentful Config")
 }

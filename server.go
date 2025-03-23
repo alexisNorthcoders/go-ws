@@ -12,6 +12,8 @@ import (
 
 	"maps"
 
+	"slices"
+
 	"github.com/gorilla/websocket"
 )
 
@@ -175,7 +177,7 @@ func handleConnections(w http.ResponseWriter, req *http.Request) {
 	}
 	clientsMutex.Unlock()
 
-	log.Printf("Client connected to room: %s", roomId)
+	log.Printf("Client %s connected to room: %s", clients[conn].playerId, roomId)
 
 	// Listen for messages from the client
 	for {
@@ -214,7 +216,7 @@ func findOrCreateRoom(conn *websocket.Conn, playerId string) string {
 		snakesMap:       make(map[string]Player),
 		FoodCoordinates: GenerateFoodCoordinates(GameConfigJSON.FoodStorage),
 	}
-	log.Printf("Player %s created new room %s", playerId, roomId)
+	log.Printf("Player %s created new room: %s", playerId, roomId)
 	return roomId
 }
 
@@ -292,17 +294,17 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 			room.addToWaitingRoom(message.Player)
 		}
 	case "waitingRoomStatus":
-		log.Println("Sending waiting room status")
+		log.Printf("Sending waiting room status to room: %s", roomId)
 		room.broadcastWaitingRoomStatus()
 
 	case "startGame":
 
 		if len(room.waitingRoom) > 0 {
-			log.Println("Starting game...")
+			log.Printf("Starting game on room: %s", room.id)
 			room.startGame()
 		}
 	case "getConfig":
-		log.Println("Client requested game config")
+		log.Printf("Client %s requested game config", client.playerId)
 		//room.serverSnake()
 		room.sendConfig(conn)
 
@@ -381,8 +383,15 @@ func (r *Room) startGameLoop() {
 				r.broadcast(gameOverMessage)
 				r.hasGameStarted = false
 
-				// Reset the snakesMap
-				r.snakesMap = make(map[string]Player)
+				// Clear the room's data
+				r.players = nil
+				r.snakesMap = nil
+				r.FoodCoordinates = nil
+
+				// Remove the room from the map
+				roomID := r.id
+				log.Printf("Deleting room %s\n", roomID)
+				delete(rooms, roomID)
 
 				return
 			}
@@ -451,7 +460,7 @@ func (r *Room) broadcastWaitingRoomStatus() {
 	clientsMutex.Lock()
 	defer clientsMutex.Unlock()
 
-	for conn := range clients {
+	for _, conn := range r.players {
 		err := conn.WriteMessage(websocket.TextMessage, messageBytes)
 		if err != nil {
 			log.Println("Error sending waiting room status to client:", err)
@@ -484,7 +493,6 @@ func (r *Room) startGame() {
 }
 
 func (r *Room) sendConfig(conn *websocket.Conn) {
-	fmt.Println(r.FoodCoordinates)
 
 	configMessage := ConfigMessage{
 		Event:  "config",
@@ -518,12 +526,14 @@ func (r *Room) broadcast(message BroadcastMessage) {
 	/* r.snakesMapMutex.Lock()
 	defer r.snakesMapMutex.Unlock() */
 
-	for _, conn := range r.players {
+	for i, conn := range r.players {
 		err := conn.WriteMessage(websocket.TextMessage, msgBytes)
 		if err != nil {
 			log.Println("Error sending message to client:", err)
 			conn.Close()
 			delete(clients, conn)
+			r.players = slices.Delete(r.players, i, i+1)
+			log.Printf("Player at index %d removed from the game due to an error.\n", i)
 		}
 	}
 }
@@ -546,7 +556,6 @@ func (r *Room) handleDisconnection(conn *websocket.Conn) {
 	}
 	playerId := client.playerId
 
-	// Remove client from clients map immediately
 	delete(clients, conn)
 	clientsMutex.Unlock()
 	log.Println("Client removed from clients map")
