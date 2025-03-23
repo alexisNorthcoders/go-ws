@@ -199,7 +199,7 @@ func findOrCreateRoom(conn *websocket.Conn, playerId string) string {
 	defer roomsMutex.Unlock()
 
 	for roomId, room := range rooms {
-		if len(room.players) < 2 {
+		if len(room.players) < 2 && !room.hasGameStarted {
 			// Add the player to the room
 			room.players = append(room.players, conn)
 			log.Printf("Player %s joined room %s", playerId, roomId)
