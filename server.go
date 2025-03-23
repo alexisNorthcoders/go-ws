@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -112,10 +113,10 @@ var rooms = make(map[string]*Room)
 var roomsMutex sync.Mutex
 
 var directionMap = map[string]struct{ X, Y int }{
-	"LEFT":  {X: -1, Y: 0},
-	"RIGHT": {X: 1, Y: 0},
-	"UP":    {X: 0, Y: -1},
-	"DOWN":  {X: 0, Y: 1},
+	"l": {X: -1, Y: 0},
+	"r": {X: 1, Y: 0},
+	"u": {X: 0, Y: -1},
+	"d": {X: 0, Y: 1},
 }
 
 // position vars only 4 positions for now
@@ -178,7 +179,7 @@ func handleConnections(w http.ResponseWriter, req *http.Request) {
 
 	// Listen for messages from the client
 	for {
-		msgType, msg, err := conn.ReadMessage()
+		_, msg, err := conn.ReadMessage()
 		if err != nil {
 			log.Println("Read error or client disconnected:", err)
 			room.handleDisconnection(conn)
@@ -186,7 +187,7 @@ func handleConnections(w http.ResponseWriter, req *http.Request) {
 		}
 
 		// Pass the message type to processMessage
-		processMessage(conn, msg, msgType)
+		processMessage(conn, msg)
 	}
 }
 
@@ -222,25 +223,9 @@ func generateRoomId() string {
 }
 
 // Process incoming messages
-func processMessage(conn *websocket.Conn, msg []byte, msgType int) {
-
-	if msgType == websocket.BinaryMessage && len(msg) == 1 && msg[0] == 1 {
-		clientsMutex.Lock()
-		err := conn.WriteMessage(websocket.BinaryMessage, []byte{2})
-		clientsMutex.Unlock()
-
-		if err != nil {
-			log.Println("Error sending binary pong:", err)
-		}
-		return
-	}
+func processMessage(conn *websocket.Conn, msg []byte) {
 
 	var message Message
-	err := json.Unmarshal(msg, &message)
-	if err != nil {
-		log.Println("Error parsing message:", err)
-		return
-	}
 
 	// Retrieve the room ID of the player
 	client := clients[conn]
@@ -253,6 +238,43 @@ func processMessage(conn *websocket.Conn, msg []byte, msgType int) {
 
 	if !exists {
 		log.Printf("Room %s not found for player %s", roomId, message.Player.ID)
+		return
+	}
+
+	// Check if the message is a simple string before attempting to unmarshal it
+	strMsg := string(msg)
+	if strMsg == "p" {
+		clientsMutex.Lock()
+		err := conn.WriteMessage(websocket.TextMessage, []byte("p"))
+		clientsMutex.Unlock()
+
+		if err != nil {
+			log.Println("Error sending pong:", err)
+		}
+		return
+	}
+	if strings.HasPrefix(strMsg, "m:") {
+		parts := strings.Split(strMsg[2:], ":")
+		playerId := parts[0]
+		key := parts[1]
+
+		if player, exists := room.snakesMap[playerId]; exists {
+			if speed, ok := directionMap[key]; ok {
+				// check is snake is trying to move in the same axis
+				if (player.Snake.Speed.X != 0 && speed.X != 0) || (player.Snake.Speed.Y != 0 && speed.Y != 0) {
+					return
+				}
+				player.Snake.Speed.X = speed.X
+				player.Snake.Speed.Y = speed.Y
+				room.snakesMap[playerId] = player
+			}
+		}
+		return
+	}
+
+	err := json.Unmarshal(msg, &message)
+	if err != nil {
+		log.Println("Error parsing message:", err)
 		return
 	}
 
@@ -279,21 +301,6 @@ func processMessage(conn *websocket.Conn, msg []byte, msgType int) {
 			log.Println("Starting game...")
 			room.startGame()
 		}
-	case "playerMovement":
-		//log.Printf("Player moved: Id: %s, Key: %s", message.ID, message.Key)
-
-		if player, exists := room.snakesMap[message.ID]; exists {
-			if speed, ok := directionMap[message.Key]; ok {
-				// check is snake is trying to move in the same axis
-				if (player.Snake.Speed.X != 0 && speed.X != 0) || (player.Snake.Speed.Y != 0 && speed.Y != 0) {
-					return
-				}
-				player.Snake.Speed.X = speed.X
-				player.Snake.Speed.Y = speed.Y
-				room.snakesMap[message.ID] = player
-			}
-		}
-
 	case "getConfig":
 		log.Println("Client requested game config")
 		//room.serverSnake()
