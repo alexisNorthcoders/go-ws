@@ -227,24 +227,9 @@ func generateRoomId() string {
 // Process incoming messages
 func processMessage(conn *websocket.Conn, msg []byte) {
 
-	var message Message
-
-	// Retrieve the room ID of the player
-	client := clients[conn]
-	roomId := client.roomId
-
-	// Lock the room for safe concurrent access
-	roomsMutex.Lock()
-	room, exists := rooms[roomId]
-	roomsMutex.Unlock()
-
-	if !exists {
-		log.Printf("Room %s not found for player %s", roomId, message.Player.ID)
-		return
-	}
-
 	// Check if the message is a simple string before attempting to unmarshal it
 	strMsg := string(msg)
+	// p for ping
 	if strMsg == "p" {
 		clientsMutex.Lock()
 		err := conn.WriteMessage(websocket.TextMessage, []byte("p"))
@@ -255,6 +240,21 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 		}
 		return
 	}
+
+	var message Message
+
+	// Retrieve the room ID of the player
+	client := clients[conn]
+	roomId := client.roomId
+	roomsMutex.Lock()
+	room, exists := rooms[roomId]
+	roomsMutex.Unlock()
+
+	if !exists {
+		log.Printf("Room %s not found for player %s", roomId, message.Player.ID)
+		return
+	}
+
 	if strings.HasPrefix(strMsg, "m:") {
 		parts := strings.Split(strMsg[2:], ":")
 		playerId := parts[0]
@@ -292,6 +292,9 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 			message.Player.Snake.Size = 0
 
 			room.addToWaitingRoom(message.Player)
+			room.broadcastWaitingRoomStatus()
+			room.sendConfig(conn)
+			log.Printf("Config sent to player %s", client.playerId)
 		}
 	case "waitingRoomStatus":
 		log.Printf("Sending waiting room status to room: %s", roomId)
@@ -303,10 +306,6 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 			log.Printf("Starting game on room: %s", room.id)
 			room.startGame()
 		}
-	case "getConfig":
-		log.Printf("Client %s requested game config", client.playerId)
-		//room.serverSnake()
-		room.sendConfig(conn)
 
 	case "updatePlayer":
 
@@ -560,32 +559,15 @@ func (r *Room) handleDisconnection(conn *websocket.Conn) {
 	clientsMutex.Unlock()
 	log.Println("Client removed from clients map")
 
-	// Grace period to allow for quick reconnections
-	go func() {
-		time.Sleep(3 * time.Second) // Grace period
+	r.snakesMapMutex.Lock()
+	delete(r.snakesMap, playerId)
+	r.snakesMapMutex.Unlock()
 
-		// Check if the player reconnected
-		clientsMutex.Lock()
-		for _, c := range clients {
-			if c.playerId == playerId {
-				// Player reconnected, skip removal
-				clientsMutex.Unlock()
-				log.Printf("Player %s reconnected, skipping removal", playerId)
-				return
-			}
-		}
-		clientsMutex.Unlock()
-
-		// Remove from snakesMap if still disconnected
-		r.snakesMapMutex.Lock()
-		delete(r.snakesMap, playerId)
-		r.snakesMapMutex.Unlock()
-
+	if !r.hasGameStarted {
 		r.removeFromWaitingRoom(playerId)
 		r.broadcastWaitingRoomStatus()
+	}
 
-		log.Printf("Player %s removed from snakesMap after grace period", playerId)
-	}()
 }
 
 func webhookHandler(w http.ResponseWriter, r *http.Request) {
