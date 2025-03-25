@@ -20,3 +20,8 @@ func getRandomDirection(X int, Y int) (int, int) {
 
 	return newDirection.X, newDirection.Y
 }
+
+func randomNumber() int {
+	rand.New(rand.NewSource(time.Now().UnixNano()))
+	return rand.Intn(91) + 1
+}

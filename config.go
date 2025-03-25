@@ -5,6 +5,7 @@ import (
 )
 
 type Config struct {
+	BackgroundNumber int    `json:"backgroundNumber"`
 	Side             int    `json:"side"`
 	LeftSectionSize  int    `json:"leftSectionSize"`
 	FoodStorage      int    `json:"foodStorage"`

@@ -493,6 +493,7 @@ func (r *Room) startGame() {
 
 func (r *Room) sendConfig(conn *websocket.Conn) {
 
+	GameConfigJSON.BackgroundNumber = randomNumber()
 	configMessage := ConfigMessage{
 		Event:  "config",
 		Config: &GameConfigJSON,
