@@ -85,6 +85,7 @@ type FoodUpdateMessage struct {
 // Room structure to hold room data.
 type Room struct {
 	id                string
+	playersMutex      sync.Mutex
 	players           []*websocket.Conn
 	snakesMap         map[string]Player
 	snakesMapMutex    sync.Mutex
@@ -564,11 +565,28 @@ func (r *Room) handleDisconnection(conn *websocket.Conn) {
 	delete(r.snakesMap, playerId)
 	r.snakesMapMutex.Unlock()
 
+	r.removePlayerConnection(conn)
+
 	if !r.hasGameStarted {
 		r.removeFromWaitingRoom(playerId)
 		r.broadcastWaitingRoomStatus()
 	}
+}
 
+func (r *Room) removePlayerConnection(conn *websocket.Conn) {
+
+	r.playersMutex.Lock()
+	defer r.playersMutex.Unlock()
+
+	for i, playerConn := range r.players {
+		if playerConn == conn {
+
+			r.players = slices.Delete(r.players, i, i+1)
+			log.Printf("Removed connection from players in room %s", r.id)
+			return
+		}
+	}
+	log.Printf("Connection not found in players list for room %s", r.id)
 }
 
 func webhookHandler(w http.ResponseWriter, r *http.Request) {
