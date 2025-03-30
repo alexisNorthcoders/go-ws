@@ -23,7 +23,7 @@ func GenerateFoodCoordinates(foodCount int) [][]int {
 	coordinates := make([][]int, foodCount)
 
 	for i := range foodCount {
-		coordinates[i] = []int{rand.Intn(GameConfigJSON.ScaleFactor)*GameConfigJSON.GridSize + GameConfigJSON.LeftSectionSize, rand.Intn(GameConfigJSON.ScaleFactor) * GameConfigJSON.GridSize, i}
+		coordinates[i] = []int{rand.Intn(GameConfigJSON.ScaleFactor), rand.Intn(GameConfigJSON.ScaleFactor), i}
 	}
 
 	return coordinates

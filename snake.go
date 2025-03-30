@@ -33,7 +33,7 @@ func (s *Snake) Update(room *Room) {
 
 			s.Score += 50
 
-			newCoord := [][]int{{rand.Intn(GameConfigJSON.ScaleFactor)*GameConfigJSON.GridSize + GameConfigJSON.LeftSectionSize, rand.Intn(GameConfigJSON.ScaleFactor) * GameConfigJSON.GridSize, room.FoodCoordinates[i][2]}}
+			newCoord := [][]int{{rand.Intn(GameConfigJSON.ScaleFactor), rand.Intn(GameConfigJSON.ScaleFactor), room.FoodCoordinates[i][2]}}
 			room.FoodCoordinates[i] = newCoord[0]
 
 			foodMessage := FoodUpdateMessage{
@@ -57,22 +57,21 @@ func (s *Snake) Update(room *Room) {
 	}
 
 	// Move the snake
-	s.X += s.Speed.X * GameConfigJSON.GridSize
-	s.Y += s.Speed.Y * GameConfigJSON.GridSize
+	s.X += s.Speed.X
+	s.Y += s.Speed.Y
 
-	side := GameConfigJSON.Side
-	leftSectionSize := GameConfigJSON.LeftSectionSize
+	scaleFactor := GameConfigJSON.ScaleFactor
 
-	if s.X >= side+leftSectionSize {
-		s.X = 0 + leftSectionSize
-	} else if s.X < 0+leftSectionSize {
-		s.X = side + leftSectionSize
+	if s.X >= scaleFactor {
+		s.X = 0
+	} else if s.X < 0 {
+		s.X = scaleFactor
 	}
 
-	if s.Y >= side {
+	if s.Y >= scaleFactor {
 		s.Y = 0
 	} else if s.Y < 0 {
-		s.Y = side
+		s.Y = scaleFactor
 	}
 
 	// Check for self-collision

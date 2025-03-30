@@ -245,8 +245,10 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 	var message Message
 
 	// Retrieve the room ID of the player
+	clientsMutex.Lock()
 	client := clients[conn]
 	roomId := client.roomId
+	clientsMutex.Unlock()
 	roomsMutex.Lock()
 	room, exists := rooms[roomId]
 	roomsMutex.Unlock()
@@ -261,10 +263,12 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 		playerId := parts[0]
 		key := parts[1]
 
+		roomsMutex.Lock()
 		if player, exists := room.snakesMap[playerId]; exists {
 			if speed, ok := directionMap[key]; ok {
 				// check is snake is trying to move in the same axis
 				if (player.Snake.Speed.X != 0 && speed.X != 0) || (player.Snake.Speed.Y != 0 && speed.Y != 0) {
+					roomsMutex.Unlock()
 					return
 				}
 				player.Snake.Speed.X = speed.X
@@ -272,6 +276,7 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 				room.snakesMap[playerId] = player
 			}
 		}
+		roomsMutex.Unlock()
 		return
 	}
 
@@ -292,9 +297,11 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 			message.Player.Snake.Tail = []Vector{}
 			message.Player.Snake.Size = 0
 
+			roomsMutex.Lock()
 			room.addToWaitingRoom(message.Player)
 			room.broadcastWaitingRoomStatus()
 			room.sendConfig(conn)
+			roomsMutex.Unlock()
 			log.Printf("Config sent to player %s", client.playerId)
 		}
 	case "waitingRoomStatus":
@@ -319,8 +326,10 @@ func processMessage(conn *websocket.Conn, msg []byte) {
 		snake.Colours.Head = message.Player.Colours.Head
 		snake.Colours.Eyes = message.Player.Colours.Eyes
 
+		roomsMutex.Lock()
 		room.waitingRoom[message.Player.ID] = snake
 		room.broadcastWaitingRoomStatus()
+		roomsMutex.Unlock()
 
 	default:
 		log.Println("Unknown event received:", message.Event)
@@ -362,7 +371,8 @@ func (r *Room) startGameLoop() {
 				return
 			}
 
-			//r.snakesMapMutex.Lock()
+			/* r.snakesMapMutex.Lock()
+			defer r.snakesMapMutex.Unlock() */
 
 			r.aliveCount = 0
 
@@ -382,13 +392,10 @@ func (r *Room) startGameLoop() {
 				}
 				r.broadcast(gameOverMessage)
 				r.hasGameStarted = false
-
-				// Clear the room's data
 				r.players = nil
 				r.snakesMap = nil
 				r.FoodCoordinates = nil
 
-				// Remove the room from the map
 				roomID := r.id
 				log.Printf("Deleting room %s\n", roomID)
 				delete(rooms, roomID)
@@ -415,8 +422,8 @@ func (r *Room) addToWaitingRoom(player Player) {
 
 	// Assign a starting position
 	if r.nextPositionIndex < len(startingPositions) {
-		player.Snake.X = startingPositions[r.nextPositionIndex].x*GameConfigJSON.GridSize + GameConfigJSON.LeftSectionSize
-		player.Snake.Y = startingPositions[r.nextPositionIndex].y * GameConfigJSON.GridSize
+		player.Snake.X = startingPositions[r.nextPositionIndex].x
+		player.Snake.Y = startingPositions[r.nextPositionIndex].y
 		r.nextPositionIndex++
 	} else {
 		// Handle case where there are more players than predefined positions
@@ -523,17 +530,20 @@ func (r *Room) broadcast(message BroadcastMessage) {
 		return
 	}
 
-	// Lock the room to prevent concurrent modification of players during broadcast
-	/* r.snakesMapMutex.Lock()
-	defer r.snakesMapMutex.Unlock() */
+	playersCopy := slices.Clone(r.players)
 
-	for i, conn := range r.players {
+	for i, conn := range playersCopy {
+
 		err := conn.WriteMessage(websocket.TextMessage, msgBytes)
 		if err != nil {
 			log.Println("Error sending message to client:", err)
+
+			r.playersMutex.Lock()
 			conn.Close()
 			delete(clients, conn)
 			r.players = slices.Delete(r.players, i, i+1)
+			r.playersMutex.Unlock()
+
 			log.Printf("Player at index %d removed from the game due to an error.\n", i)
 		}
 	}
@@ -546,7 +556,8 @@ func (r *Room) moveSnake() {
 }
 
 func (r *Room) handleDisconnection(conn *websocket.Conn) {
-	log.Printf("Handling disconnection")
+
+	r.removePlayerConnection(conn)
 
 	clientsMutex.Lock()
 	client, exists := clients[conn]
@@ -564,8 +575,6 @@ func (r *Room) handleDisconnection(conn *websocket.Conn) {
 	r.snakesMapMutex.Lock()
 	delete(r.snakesMap, playerId)
 	r.snakesMapMutex.Unlock()
-
-	r.removePlayerConnection(conn)
 
 	if !r.hasGameStarted {
 		r.removeFromWaitingRoom(playerId)
