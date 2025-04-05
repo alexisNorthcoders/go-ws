@@ -74,7 +74,7 @@ func handleConnections(w http.ResponseWriter, req *http.Request) {
 		if client.playerId == playerId {
 			log.Printf("Duplicate connection detected for player: %s", playerId)
 			existingConn.Close()
-			delete(clients, existingConn) // Remove old connection
+			delete(clients, existingConn)
 		}
 	}
 	clientsMutex.Unlock()
@@ -102,18 +102,29 @@ func handleConnections(w http.ResponseWriter, req *http.Request) {
 
 	log.Printf("Client %s connected to room: %s", clients[conn].playerId, roomId)
 
-	// Listen for messages from the client
-	for {
-		_, msg, err := conn.ReadMessage()
-		if err != nil {
-			log.Println("Read error or client disconnected:", err)
-			room.handleDisconnection(conn)
-			break
-		}
+	// Create a channel for received messages
+	messageChannel := make(chan []byte)
 
-		// Pass the message type to processMessage
-		processMessage(conn, msg)
-	}
+	// Goroutine to read messages from the WebSocket
+	go func() {
+		for {
+			_, msg, err := conn.ReadMessage()
+			if err != nil {
+				log.Println("Read error or client disconnected:", err)
+				room.handleDisconnection(conn)
+				break
+			}
+			messageChannel <- msg
+		}
+	}()
+
+	go func() {
+		for msg := range messageChannel {
+			processMessage(conn, msg)
+		}
+	}()
+
+	select {}
 }
 
 // Process incoming messages

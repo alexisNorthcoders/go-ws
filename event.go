@@ -28,7 +28,7 @@ func (m SnakeUpdateMessage) GetEvent() string {
 type ConfigMessage struct {
 	Event  string  `json:"event"`
 	Config *Config `json:"config,omitempty"`
-	Food   [][]int `json:"food"`
+	Food   [][]any `json:"food"`
 }
 
 func (m ConfigMessage) GetEvent() string {
@@ -37,7 +37,7 @@ func (m ConfigMessage) GetEvent() string {
 
 type FoodUpdateMessage struct {
 	Event string  `json:"event"`
-	Food  [][]int `json:"food"`
+	Food  [][]any `json:"food"`
 }
 
 func (m FoodUpdateMessage) GetEvent() string {

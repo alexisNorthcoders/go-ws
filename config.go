@@ -19,11 +19,15 @@ type Config struct {
 	} `json:"waitingRoom"`
 }
 
-func GenerateFoodCoordinates(foodCount int) [][]int {
-	coordinates := make([][]int, foodCount)
+func GenerateFoodCoordinates(foodCount int) [][]any {
+	coordinates := make([][]any, foodCount)
 
 	for i := range foodCount {
-		coordinates[i] = []int{rand.Intn(GameConfigJSON.ScaleFactor), rand.Intn(GameConfigJSON.ScaleFactor), i}
+		x := rand.Intn(GameConfigJSON.ScaleFactor)
+		y := rand.Intn(GameConfigJSON.ScaleFactor)
+
+		typeIndex := rand.Intn(len(foodTypes))
+		coordinates[i] = []any{x, y, i, foodTypes[typeIndex]}
 	}
 
 	return coordinates

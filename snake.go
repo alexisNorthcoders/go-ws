@@ -31,9 +31,11 @@ func (s *Snake) Update(room *Room) {
 			s.Size++
 			s.Tail = append(s.Tail, Vector{X: s.X, Y: s.Y})
 
-			s.Score += 50
+			s.Score += foodScore[room.FoodCoordinates[i][3].(string)]
 
-			newCoord := [][]int{{rand.Intn(GameConfigJSON.ScaleFactor), rand.Intn(GameConfigJSON.ScaleFactor), room.FoodCoordinates[i][2]}}
+			typeIndex := rand.Intn(len(foodTypes))
+
+			newCoord := [][]any{{rand.Intn(GameConfigJSON.ScaleFactor), rand.Intn(GameConfigJSON.ScaleFactor), room.FoodCoordinates[i][2], foodTypes[typeIndex]}}
 			room.FoodCoordinates[i] = newCoord[0]
 
 			foodMessage := FoodUpdateMessage{

@@ -23,7 +23,7 @@ type Room struct {
 	waitingRoomMutex  sync.Mutex
 	hasGameStarted    bool
 	aliveCount        int
-	FoodCoordinates   [][]int
+	FoodCoordinates   [][]any
 }
 
 var rooms = make(map[string]*Room)
