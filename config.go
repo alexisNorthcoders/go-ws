@@ -28,3 +28,10 @@ func GenerateFoodCoordinates(foodCount int) [][]int {
 
 	return coordinates
 }
+
+var directionMap = map[string]struct{ X, Y int }{
+	"l": {X: -1, Y: 0},
+	"r": {X: 1, Y: 0},
+	"u": {X: 0, Y: -1},
+	"d": {X: 0, Y: 1},
+}
